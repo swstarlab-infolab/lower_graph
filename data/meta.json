@@ -1,0 +1,25 @@
+{
+    "data-name":"as20000102",
+    "ext" : {
+        "row" : "row",
+        "column-pointer" : "ptr",
+        "column" : "col"
+    },
+    "grid-list" : [
+        {
+            "file-name" : "000-000",
+            "row-position" : 0,
+            "column-position" : 0
+        },
+        {
+            "file-name" : "001-000",
+            "row-position" : 1,
+            "column-position" : 0
+        },
+        {
+            "file-name" : "001-001",
+            "row-position" : 1,
+            "column-position" : 1
+        }
+    ]
+}
