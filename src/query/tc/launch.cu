@@ -8,5 +8,5 @@ __global__ static void kernel() {
 }
 
 void launch(std::vector<gridData_t> const & data) {
-    
+
 }
