@@ -1,4 +1,3 @@
-#include <tbb/tbb.h>
 #include <nlohmann/json.hpp>
 
 #include <grid.h>
@@ -15,50 +14,58 @@
 using json = nlohmann::json;
 
 static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
+    std::cout << ">>> Read and Parse Metadata" << std::endl;
     // Read JSON file as string
     std::fstream fs;
     fs.open(path);
+
     fs.seekg(0, std::ios::end);
     auto const filesize = fs.tellg();
     fs.seekg(0, std::ios::beg);
+
     std::string input;
     input.resize(filesize);
+
     fs.read(input.data(), filesize);
+
     fs.close();
     
     // Parsing JSON from string
     auto j = json::parse(input);
+    std::cout << std::string(j["dataname"]) << std::endl;
 
     // Generate file path from metadata JSON file
-    info.resize(j["grid-list"].size());
+    info.resize(j["grids"].size());
     auto folder = fs::path(path.parent_path().string() + "/");
 
     uint32_t i = 0;
-    for (auto & l : j["grid-list"]) {
+    for (auto & l : j["grids"]) {
         auto & g = info[i];
-        auto basicstr = folder.string() + std::string(l["file-name"]) + ".";
-        g.path.row = fs::path(basicstr + std::string(j["ext"]["row"]));
-        g.path.ptr = fs::path(basicstr + std::string(j["ext"]["column-pointer"]));
-        g.path.col = fs::path(basicstr + std::string(j["ext"]["column"]));
-        if (!fs::exists(g.path.row)) {
-            std::cerr << "Not exists: " << g.path.row.string() << std::endl;
-            exit(EXIT_FAILURE);
-        }
+        auto basicstr = folder.string() + std::string(l["filename"]) + ".";
+
+        g.path.ptr = fs::path(basicstr + std::string(j["ext"]["ptr"]));
+        g.path.col = fs::path(basicstr + std::string(j["ext"]["col"]));
+
         if (!fs::exists(g.path.ptr)) {
             std::cerr << "Not exists: " << g.path.ptr.string() << std::endl;
             exit(EXIT_FAILURE);
         }
+
         if (!fs::exists(g.path.col)) {
             std::cerr << "Not exists: " << g.path.col.string() << std::endl;
             exit(EXIT_FAILURE);
         }
-        g.pos.row = l["row-position"];
-        g.pos.col = l["column-position"];
+
+        g.pos.row = l["row"];
+        g.pos.col = l["col"];
+
         i++;
     }
 }
 
 static void readData(std::vector<gridInfo_t> const & info, std::vector<gridData_t> & data) {
+    std::cout << ">>> Read Grid Data" << std::endl;
+
     auto grids = info.size();
     data.resize(grids);
 
@@ -68,14 +75,14 @@ static void readData(std::vector<gridInfo_t> const & info, std::vector<gridData_
         fs.open(p);
         fs.seekg(0, std::ios::end);
         auto const filesize = fs.tellg();
+        std::cout << filesize << std::endl;
         fs.seekg(0, std::ios::beg);
-        d.resize(filesize);
+        d.resize(filesize / sizeof(vertex_t));
         fs.read((char*)d.data(), filesize);
         fs.close();
     };
 
     for (uint32_t i = 0; i < grids; i++) {
-        load(info[i].path.row, data[i].row);
         load(info[i].path.ptr, data[i].ptr);
         load(info[i].path.col, data[i].col);
     }
@@ -93,10 +100,11 @@ int main(int argc, char * argv[]) {
     std::vector<gridInfo_t> gridInfo;
     readMeta(pathMeta, gridInfo);
 
-    //std::vector<gridData_t> gridData;
-    //readData(gridInfo, gridData);
+    std::vector<gridData_t> gridData;
+    readData(gridInfo, gridData);
 
-    //launch(gridData);
+    std::cout << ">>> Launch Kernel" << std::endl;
+    launch(gridData);
 
     return 0;
 }

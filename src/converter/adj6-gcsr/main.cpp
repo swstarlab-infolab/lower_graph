@@ -1,4 +1,10 @@
-#include <tbb/tbb.h>
+#include <tbb/parallel_sort.h>
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_for_each.h>
+#include <tbb/parallel_reduce.h>
+#include <tbb/parallel_scan.h>
+#include <tbb/concurrent_vector.h>
+
 #include <nlohmann/json.hpp>
 #include <grid.h>
 
@@ -6,13 +12,29 @@
 #include <fstream>
 #include <iostream>
 
+#include <iomanip>
+
 using json = nlohmann::json;
 
 #define EDGEMAX edge_t{0xFFFFFFFF, 0xFFFFFFFF}
 #define UNIT 6
-#define GRID_WIDTH 64
+
+vertex_t constexpr GRID_WIDTH = (1<<24);
+
+static bool operator==(edge_t const & a, edge_t const & b) {
+    return a.dst == b.dst && a.src == b.src;
+}
+
+static bool operator!=(edge_t const & a, edge_t const & b) {
+    return !(a.dst == b.dst && a.src == b.src);
+}
+
+static bool operator<(edge_t const & a, edge_t const & b) {
+    return (a.src == b.src) ? a.dst < b.dst : a.src < b.src;
+}
 
 static void readADJ6(fs::path const & folder, std::vector<edge_t> & edgelist) {
+    std::cout << ">>> Read ADJ6 Files" << std::endl;
     std::vector<char> temp;
 
     std::fstream fs;
@@ -29,53 +51,67 @@ static void readADJ6(fs::path const & folder, std::vector<edge_t> & edgelist) {
 
     for (auto & p : fs::recursive_directory_iterator(folder)) {
         fs.open(p.path());
+
         fs.seekg(0, std::ios::end);
         uint64_t const filesize = fs.tellg();
         fs.seekg(0, std::ios::beg);
+
         estimated += filesize / UNIT;
+
         fs.close();
     }
 
     edgelist.resize(estimated);
 
+    std::cout << "complete: allocate memory of edgelist and buffer for ADJ6 files" << std::endl;
+
     uint64_t position = 0;
     for (auto & p : fs::recursive_directory_iterator(folder)) {
         fs.open(p.path());
+
         fs.seekg(0, std::ios::end);
         uint64_t const filesize = fs.tellg();
         fs.seekg(0, std::ios::beg);
-        temp.resize(filesize);
+
         std::cout << p.path().string() << std::endl;
+
+        temp.resize(filesize);
         fs.read(temp.data(), filesize);
+
         fs.close();
 
         for (uint64_t i = 0; i < filesize;) {
             uint64_t src = bigendian(i);
             i+=UNIT;
+
             uint64_t size = bigendian(i);
             i+=UNIT;
+
             for (uint64_t j = 0; j < size; j++) {
                 uint64_t dst = bigendian(i);
+                i+=UNIT;
+
                 edgelist[position] = edge_t{vertex_t(src), vertex_t(dst)};
                 position++;
-                i+=UNIT;
             }
         }
     }
 
     edgelist.resize(position);
+
+    std::cout << "complete: file read and parse to fill edgelist" << std::endl;
 }
 
 static void writeGCSR(std::vector<edge_t> const & edgelist, fs::path const & folder, std::string const & dbname) {
-    // make CSR
+    std::cout << ">>> Dividing Grid" << std::endl;
 
-    auto maxvertex = tbb::parallel_reduce(
+    vertex_t maxvertex = tbb::parallel_reduce(
         tbb::blocked_range<size_t>(0, edgelist.size()),
         0,
         [&edgelist](tbb::blocked_range<size_t> r, vertex_t max) -> vertex_t {
             for (size_t i = r.begin(); i < r.end(); ++i) {
-                if (edgelist[i].src > max) { max = edgelist[i].src; }
-                if (edgelist[i].dst > max) { max = edgelist[i].dst; }
+                max = (edgelist[i].src > max) ? edgelist[i].src : max;
+                max = (edgelist[i].dst > max) ? edgelist[i].dst : max;
             }
             return max;
         },
@@ -83,28 +119,121 @@ static void writeGCSR(std::vector<edge_t> const & edgelist, fs::path const & fol
             return (a < b) ? b : a;
         });
 
-    auto grids = std::ceil(maxvertex / float(GRID_WIDTH));
-    auto rc2i = [&grids](size_t const row, size_t const col) { return row * grids + col; };
+    auto grids = vertex_t(std::ceil(float(maxvertex) / float(GRID_WIDTH)));
 
-    std::vector<std::vector<std::vector<vertex_t>>> grid;
+    std::cout << "complete: find max vertex id" << std::endl;
+
+    auto rc2i = [&grids](vertex_t const row, vertex_t const col) ->vertex_t{ return row * grids + col; };
+    auto i2r = [&grids](vertex_t const idx) ->vertex_t { return idx / grids; };
+    auto i2c = [&grids](vertex_t const idx) ->vertex_t{ return idx % grids; };
+
+    std::vector<std::vector<std::vector<vertex_t>>> adjlist;
+    adjlist.resize(grids * grids);
 
     for (uint32_t r = 0; r < grids; r++) {
         for (uint32_t c = 0; c < grids; c++) {
-            grid[rc2i(r, c)].resize(GRID_WIDTH);
+            adjlist[rc2i(r, c)].resize(GRID_WIDTH);
         }
     }
 
+    std::cout << "complete: allocate memory space for grid-divided adjacency list" << std::endl;
+
     for (auto & e : edgelist) {
         auto const gRow = e.src / GRID_WIDTH;
-        auto const gRowOff = e.src % GRID_WIDTH;
         auto const gCol = e.dst / GRID_WIDTH;
+
+        auto const gRowOff = e.src % GRID_WIDTH;
         auto const gColOff = e.dst % GRID_WIDTH;
-        grid[rc2i(gRow, gCol)][gRowOff].push_back(gColOff);
+
+        adjlist[rc2i(gRow, gCol)][gRowOff].push_back(gColOff);
     }
 
-    for (auto & e : edgelist) {
+    std::cout << "complete: separate edges from edgelist to grid-divided adjacency list" << std::endl;
 
+    // set memory
+    std::vector<gridData_t> out(grids * grids);
+    for (size_t i = 0; i < adjlist.size(); i++) {
+        auto & o = out[i];
+        auto & a = adjlist[i];
+        o.ptr.resize(GRID_WIDTH + 1);
+        std::fill(o.ptr.begin(), o.ptr.end(), vertex_t(0));
+
+        size_t columns = 0;
+        for (auto & row : a) {
+            columns += row.size();
+        }
+
+        o.col.resize(columns);
     }
+
+    std::cout << "complete: allocate output memory (ptr, col) and fill zeroes" << std::endl;
+
+    // fill ptr
+    for (size_t i = 0; i < adjlist.size(); i++) {
+        auto & o = out[i];
+        auto & a = adjlist[i];
+
+        // prefix sum (exclusive scan)
+        for (size_t j = 1; j < a.size()+1; j++) {
+            o.ptr[j] = o.ptr[j-1] + a[j-1].size();
+        }
+    }
+
+    std::cout << "complete: fill ptr using exclusive scan prefix sum" << std::endl;
+
+    // fill col
+    for (size_t i = 0; i < adjlist.size(); i++) {
+        auto & o = out[i];
+        auto & a = adjlist[i];
+        size_t k = 0;
+        for (auto & row : a) {
+            for (auto & col : row) {
+                o.col[k++] = col;
+            }
+        }
+    }
+
+    std::cout << "complete: fill col" << std::endl;
+
+    std::cout << ">>> Saving Files" << std::endl;
+    // write file
+    auto rootfolder = folder / (dbname + "/");
+    fs::create_directory(rootfolder);
+
+    std::ofstream of;
+    json j;
+
+    j["dataname"] = dbname;
+    j["ext"]["ptr"] = "ptr";
+    j["ext"]["col"] = "col";
+
+    for (size_t i = 0; i < out.size(); i++) {
+        auto & o = out[i];
+
+        char _name[8];
+        auto row = i2r(i), col = i2c(i);
+        snprintf(_name, 8, "%03d-%03d", row, col);
+
+        j["grids"][i]["filename"] = std::string(_name);
+        j["grids"][i]["row"] = row;
+        j["grids"][i]["col"] = col;
+
+        of.open(rootfolder.string() + std::string(_name) + ".col", std::ios::out | std::ios::binary);
+        of.write((char*)o.col.data(), sizeof(vertex_t) * o.col.size());
+        of.close();
+
+        of.open(rootfolder.string() + std::string(_name) + ".ptr", std::ios::out | std::ios::binary);
+        of.write((char*)o.ptr.data(), sizeof(vertex_t) * o.ptr.size());
+        of.close();
+    }
+
+    std::cout << "complete: write col and ptr files" << std::endl;
+
+    of.open(rootfolder.string() + std::string("meta.json"), std::ios::out);
+    of << std::setw(4) << j << std::endl;
+    of.close();
+
+    std::cout << "complete: write meta.json" << std::endl;
 }
 
 int main(int argc, char * argv[]) {
@@ -117,20 +246,23 @@ int main(int argc, char * argv[]) {
     auto const outFolder = fs::path(fs::path(std::string(argv[2]) + "/").parent_path().string() + "/");
     auto const outDBName = std::string(argv[3]);
 
-    tbb::task_scheduler_init();
-
     std::vector<edge_t> edgelist;
     readADJ6(inFolder, edgelist);
 
+    std::cout << ">>> Create Lower Triangular Matrix" << std::endl;
     tbb::parallel_for_each(edgelist.begin(), edgelist.end(),
         [](edge_t & e) {
             if (e.src < e.dst) {
                 std::swap(e.src, e.dst);
             }
         });
+
+    std::cout << "complete: edge swap" << std::endl;
     
     tbb::parallel_sort(edgelist.begin(), edgelist.end(),
         [](const edge_t & e1, const edge_t & e2){ return e1 < e2; });
+
+    std::cout << "complete: edge sort" << std::endl;
 
     tbb::concurrent_vector<bool> change(edgelist.size());
 
@@ -154,6 +286,8 @@ int main(int argc, char * argv[]) {
         change.back() = true;
     }
 
+    std::cout << "complete: check self loop and duplicated edges" << std::endl;
+
     tbb::parallel_for(tbb::blocked_range<size_t>(0, edgelist.size() - 1),
         [&edgelist, &change](tbb::blocked_range<size_t> const r) {
             for (auto i = r.begin(); i < r.end(); ++i) {
@@ -167,8 +301,12 @@ int main(int argc, char * argv[]) {
         edgelist.back() = EDGEMAX;
     }
 
+    std::cout << "complete: change self loop and duplicated edges to <INTMAX, INTMAX>" << std::endl;
+
     tbb::parallel_sort(edgelist.begin(), edgelist.end(),
         [](const edge_t & e1, const edge_t & e2){ return e1 < e2; });
+
+    std::cout << "complete: sort edges" << std::endl;
     
     [](std::vector<edge_t>& el) {
         size_t maxcount = 0;
@@ -181,6 +319,8 @@ int main(int argc, char * argv[]) {
             maxcount++;
         }
     }(edgelist);
+
+    std::cout << "complete: remove <INTMAX, INTMAX>" << std::endl;
 
     writeGCSR(edgelist, outFolder, outDBName);
 
