@@ -3,6 +3,6 @@
 
 #include <grid.h>
 
-void launch(std::vector<gridData_t> const & data);
+void launch(std::vector<gridInfo_t> const & info, std::vector<gridData_t> const & data);
 
 #endif

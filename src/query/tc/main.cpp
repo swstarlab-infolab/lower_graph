@@ -32,7 +32,6 @@ static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
     
     // Parsing JSON from string
     auto j = json::parse(input);
-    std::cout << std::string(j["dataname"]) << std::endl;
 
     // Generate file path from metadata JSON file
     info.resize(j["grids"].size());
@@ -75,11 +74,11 @@ static void readData(std::vector<gridInfo_t> const & info, std::vector<gridData_
         fs.open(p);
         fs.seekg(0, std::ios::end);
         auto const filesize = fs.tellg();
-        std::cout << filesize << std::endl;
         fs.seekg(0, std::ios::beg);
         d.resize(filesize / sizeof(vertex_t));
         fs.read((char*)d.data(), filesize);
         fs.close();
+        std::cout << p.string() << " size: " << filesize << " bytes" << std::endl;
     };
 
     for (uint32_t i = 0; i < grids; i++) {
@@ -103,8 +102,7 @@ int main(int argc, char * argv[]) {
     std::vector<gridData_t> gridData;
     readData(gridInfo, gridData);
 
-    std::cout << ">>> Launch Kernel" << std::endl;
-    launch(gridData);
+    launch(gridInfo, gridData);
 
     return 0;
 }
