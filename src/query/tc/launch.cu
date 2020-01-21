@@ -7,12 +7,21 @@
 
 #define FORMAT_GRID_WIDTH uint32_t(1<<24)
 
+#ifndef CUDA_BLOCKS
 #define CUDA_BLOCKS 160
+#endif
+
+#ifndef CUDA_THREADS 
 #define CUDA_THREADS 1024
+#endif
+
+#ifndef CUDA_STREAMS 
 #define CUDA_STREAMS 4
+#endif
 
 #define CUDA_CHECK \
-        do { std::cout << "line: " << __LINE__ << " " << cudaGetLastError() << std::endl; } while (false)
+        do { } while (false)
+        //do { std::cout << "line: " << __LINE__ << " " << cudaGetLastError() << std::endl; } while (false)
 
 using count_t = unsigned long long;
 
@@ -87,7 +96,8 @@ __global__ static void kernel(
 }
 
 void launch(std::vector<gridInfo_t> const & info, std::vector<gridData_t> const & data) {
-    std::cout << ">>> Launch GPU" << std::endl;
+    //std::cout << ">>> Launch GPU" << std::endl;
+    std::cout << "STREAMS: " << CUDA_STREAMS << ", BLOCKS: " << CUDA_BLOCKS << ", THREADS: " << CUDA_THREADS << std::endl;
 
     auto rows = info.back().pos.row + 1;
     auto cols = info.back().pos.col + 1;
@@ -116,36 +126,36 @@ void launch(std::vector<gridInfo_t> const & info, std::vector<gridData_t> const 
         cudaMemset(bitmap[i], 0, sizeof(uint32_t) * (FORMAT_GRID_WIDTH / 32) * CUDA_BLOCKS); CUDA_CHECK;
     }
 
-    std::cout << "complete: GPU bitmap malloc & memset" << std::endl;
+    //std::cout << "complete: GPU bitmap malloc & memset" << std::endl;
 
     for (uint32_t row = 0; row < rows; row++) {
         for (uint32_t col = 0; col <= row; col++) {
             auto idx = rc2i(row, col);
-            std::cout << "   Malloc Grid: " << row << ", " << col << std::endl;
+            //std::cout << "   Malloc Grid: " << row << ", " << col << std::endl;
             cudaMalloc(&dPtr[row][col], data[idx].ptr.size() * sizeof(vertex_t)); CUDA_CHECK;
             cudaMalloc(&dCol[row][col], data[idx].col.size() * sizeof(vertex_t)); CUDA_CHECK;
         }
     }
 
-    std::cout << "complete: GPU graph data malloc" << std::endl;
+    //std::cout << "complete: GPU graph data malloc" << std::endl;
 
     for (uint32_t row = 0; row < rows; row++) {
         for (uint32_t col = 0; col <= row; col++) {
             auto idx = rc2i(row, col);
-            std::cout << "   Copy Grid: " << row << ", " << col << std::endl;
+            //std::cout << "   Copy Grid: " << row << ", " << col << std::endl;
             cudaMemcpy(dPtr[row][col], data[idx].ptr.data(), data[idx].ptr.size() * sizeof(vertex_t), cudaMemcpyHostToDevice); CUDA_CHECK;
             cudaMemcpy(dCol[row][col], data[idx].col.data(), data[idx].col.size() * sizeof(vertex_t), cudaMemcpyHostToDevice); CUDA_CHECK;
         }
     }
 
-    std::cout << "complete: GPU graph data memcpy" << std::endl;
+    //std::cout << "complete: GPU graph data memcpy" << std::endl;
 
     std::array<cudaStream_t, CUDA_STREAMS> stream;
     for (uint32_t i = 0; i < CUDA_STREAMS; i++) {
         cudaStreamCreate(&stream[i]); CUDA_CHECK;
     }
 
-    std::cout << "complete: GPU stream create" << std::endl;
+    //std::cout << "complete: GPU stream create" << std::endl;
 
     std::array<count_t, CUDA_STREAMS> count = {0, };
 
@@ -172,22 +182,16 @@ void launch(std::vector<gridInfo_t> const & info, std::vector<gridData_t> const 
     }
 
     for (uint32_t i = 0; i < CUDA_STREAMS; i++) {
+        cudaMemcpyAsync(&count[i], dcount[i], sizeof(count_t), cudaMemcpyDeviceToHost, stream[i]); CUDA_CHECK;
         cudaStreamSynchronize(stream[i]); CUDA_CHECK;
     }
-
-    for (uint32_t i = 0; i < CUDA_STREAMS; i++) {
-        cudaMemcpy(&count[i], dcount[i], sizeof(count_t), cudaMemcpyDeviceToHost); CUDA_CHECK;
-    }
-
-    cudaDeviceSynchronize(); CUDA_CHECK;
 
     for (uint32_t i = 1; i < CUDA_STREAMS; i++) {
         count[0] += count[i];
     }
 
     std::chrono::duration<double> elapsed = std::chrono::system_clock::now() - start;
-    std::cout << "time    : " << elapsed.count() << std::endl;
-    std::cout << "triangle: " << count[0] << std::endl;
+    std::cout << count[0] << "," << elapsed.count() << std::endl;
 
     for (uint32_t i = 0; i < CUDA_STREAMS; i++) {
         cudaStreamDestroy(stream[i]); CUDA_CHECK;

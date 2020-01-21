@@ -14,7 +14,7 @@
 using json = nlohmann::json;
 
 static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
-    std::cout << ">>> Read and Parse Metadata" << std::endl;
+    //std::cout << ">>> Read and Parse Metadata" << std::endl;
     // Read JSON file as string
     std::fstream fs;
     fs.open(path);
@@ -63,7 +63,7 @@ static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
 }
 
 static void readData(std::vector<gridInfo_t> const & info, std::vector<gridData_t> & data) {
-    std::cout << ">>> Read Grid Data" << std::endl;
+    //std::cout << ">>> Read Grid Data" << std::endl;
 
     auto grids = info.size();
     data.resize(grids);
@@ -78,7 +78,7 @@ static void readData(std::vector<gridInfo_t> const & info, std::vector<gridData_
         d.resize(filesize / sizeof(vertex_t));
         fs.read((char*)d.data(), filesize);
         fs.close();
-        std::cout << p.string() << " size: " << filesize << " bytes" << std::endl;
+        //std::cout << p.string() << " size: " << filesize << " bytes" << std::endl;
     };
 
     for (uint32_t i = 0; i < grids; i++) {

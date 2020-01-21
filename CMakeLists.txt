@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.0)
 project(GridCSR)
 
+set(CUDA_STREAMS)
+set(CUDA_BLOCKS)
+set(CUDA_THREADS)
+
+add_definitions(-DCUDA_STREAMS=${CUDA_STREAMS})
+add_definitions(-DCUDA_BLOCKS=${CUDA_BLOCKS})
+add_definitions(-DCUDA_THREADS=${CUDA_THREADS})
+
 set(CMAKE_CXX_COMPILER g++)
 set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
 
@@ -17,7 +25,7 @@ list(APPEND CUDA_NVCC_FLAGS
     -gencode arch=compute_70,code=sm_70
     -O3 -std=c++14)
 
-foreach(_ITEM adj6-gcsr)
+foreach(_ITEM adj6-gcsr tsv-gcsr)
 file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/converter/${_ITEM}/*)
 add_executable(${_ITEM} ${_FILES})
 target_link_libraries(${_ITEM} pthread tbb stdc++fs)
