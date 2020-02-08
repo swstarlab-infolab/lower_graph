@@ -15,7 +15,7 @@ for s in "${STREAMS[@]}"; do
 	    for t in "${THREADS[@]}"; do
 		cmake -DFORMAT_GRID_POWER=24 -DCUDA_STREAMS=$s -DCUDA_BLOCKS=$b -DCUDA_THREADS=$t .. > /dev/null;
 		make -j 40 > /dev/null;
-		./tc /mnt/nvme-raid0/GCSR/$dataname | tee -a "result-tc-$dataname-$s-$b-$t.out";
+		./query-tc /mnt/nvme-raid0/GCSR/$dataname | tee -a "result-tc-$dataname-$s-$b-$t.out";
 	    done
 	done
 done

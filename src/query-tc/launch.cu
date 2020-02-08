@@ -47,7 +47,10 @@ __global__ static void kernel(
 
     __shared__ int SHARED[CUDA_THREADS];
 
-    for (uint32_t g1row = blockIdx.x; g1row < FORMAT_GRID_WIDTH; g1row += gridDim.x) {
+    for (uint32_t g1row_iter = blockIdx.x; g1row_iter < G1RowSz; g1row_iter += gridDim.x) {
+        auto const g1row = G1Row[g1row_iter]; // This makes huge difference!!!
+        // Without "Existing Row" information: loop all 2^24 and check it all
+        // With "Existing Row" information: extremely faster than without-version
         auto const g1col_idx_s = G1Ptr[g1row];
         auto const g1col_idx_e = G1Ptr[g1row+1];
 
