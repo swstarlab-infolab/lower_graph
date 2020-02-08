@@ -1,7 +1,6 @@
-#include <nlohmann/json.hpp>
+#include <dataformat.h>
 
-#include <grid.h>
-#include "common.h"
+#include <nlohmann/json.hpp>
 
 #include <string>
 #include <vector>
@@ -42,8 +41,14 @@ static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
         auto & g = info[i];
         auto basicstr = folder.string() + std::string(l["filename"]) + ".";
 
+        g.path.row = fs::path(basicstr + std::string(j["ext"]["row"]));
         g.path.ptr = fs::path(basicstr + std::string(j["ext"]["ptr"]));
         g.path.col = fs::path(basicstr + std::string(j["ext"]["col"]));
+
+        if (!fs::exists(g.path.row)) {
+            std::cerr << "Not exists: " << g.path.ptr.string() << std::endl;
+            exit(EXIT_FAILURE);
+        }
 
         if (!fs::exists(g.path.ptr)) {
             std::cerr << "Not exists: " << g.path.ptr.string() << std::endl;
@@ -62,8 +67,9 @@ static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
     }
 }
 
-static void readData(std::vector<gridInfo_t> const & info, std::vector<gridData_t> & data) {
+void readGCSR(fs::path const & meta_path, std::vector<gridInfo_t> & info, std::vector<gridData_t> & data) {
     //std::cout << ">>> Read Grid Data" << std::endl;
+    readMeta(meta_path, info);
 
     auto grids = info.size();
     data.resize(grids);
@@ -82,27 +88,8 @@ static void readData(std::vector<gridInfo_t> const & info, std::vector<gridData_
     };
 
     for (uint32_t i = 0; i < grids; i++) {
+        load(info[i].path.row, data[i].row);
         load(info[i].path.ptr, data[i].ptr);
         load(info[i].path.col, data[i].col);
     }
-}
-
-int main(int argc, char * argv[]) {
-    if (argc != 2) {
-        std::cerr << "usage" << std::endl << argv[0] << " <folder_path>" << std::endl;
-        return 0;
-    }
-
-    auto const pathFolder = fs::path(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
-    auto const pathMeta = fs::path(pathFolder.string() + "meta.json");
-
-    std::vector<gridInfo_t> gridInfo;
-    readMeta(pathMeta, gridInfo);
-
-    std::vector<gridData_t> gridData;
-    readData(gridInfo, gridData);
-
-    launch(gridInfo, gridData);
-
-    return 0;
 }
