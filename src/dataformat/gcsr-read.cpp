@@ -46,7 +46,7 @@ static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
         g.path.col = fs::path(basicstr + std::string(j["ext"]["col"]));
 
         if (!fs::exists(g.path.row)) {
-            std::cerr << "Not exists: " << g.path.ptr.string() << std::endl;
+            std::cerr << "Not exists: " << g.path.row.string() << std::endl;
             exit(EXIT_FAILURE);
         }
 

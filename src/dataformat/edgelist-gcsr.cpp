@@ -83,7 +83,7 @@ void writeGCSR(std::vector<edge_t> const & edgelist, fs::path const & folder, st
         auto & a = adjlist[i];
 
         for (size_t ridx = 0; ridx < a.size(); ridx++) {
-            if (a[ridx].size()) {
+            if (a[ridx].size() != 0) {
                 o.row.push_back(ridx);
             }
         }
@@ -143,7 +143,7 @@ void writeGCSR(std::vector<edge_t> const & edgelist, fs::path const & folder, st
         j["grids"][i]["col"] = col;
 
         of.open(rootfolder.string() + std::string(_name) + ".row", std::ios::out | std::ios::binary);
-        of.write((char*)o.row.data(), sizeof(vertex_t) * o.col.size());
+        of.write((char*)o.row.data(), sizeof(vertex_t) * o.row.size());
         of.close();
 
         of.open(rootfolder.string() + std::string(_name) + ".col", std::ios::out | std::ios::binary);
