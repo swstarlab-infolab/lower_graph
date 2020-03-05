@@ -1,0 +1,34 @@
+{
+    "dataname": "twitter_rv.net-lt",
+    "extension": {
+        "col": "col",
+        "ptr": "ptr",
+        "row": "row"
+    },
+    "grid-info": {
+        "width-power": {
+            "row": 24,
+            "col": 24
+        },
+        "size": {
+            "row": 4,
+            "col": 4
+        }
+    },
+    "grid": [
+        {
+            "index": {
+                "row": 0,
+                "col": 0
+            },
+            "filename": "000-000"
+        },
+        {
+            "index": {
+                "row": 1,
+                "col": 0
+            },
+            "filename": "001-000"
+        }
+    ]
+}
