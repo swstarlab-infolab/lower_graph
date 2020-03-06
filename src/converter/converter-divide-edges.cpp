@@ -7,7 +7,7 @@
 #include <tbb/parallel_for_each.h>
 #include <tbb/parallel_sort.h>
 
-void GridCSRConverter::run() {
+void GridCSRConverter::divideEdges() {
     tbb::parallel_for(tbb::blocked_range2d<uint32_t, uint32_t>(0, this->gridCount, 0, this->gridCount),
         [this](tbb::blocked_range2d<uint32_t, uint32_t> const & r){
             for (uint32_t row = r.rows().begin(); row < r.rows().end(); row++) {

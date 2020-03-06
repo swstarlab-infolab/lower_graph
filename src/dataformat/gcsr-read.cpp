@@ -33,17 +33,17 @@ static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
     auto j = json::parse(input);
 
     // Generate file path from metadata JSON file
-    info.resize(j["grids"].size());
+    info.resize(j["grid"].size());
     auto folder = fs::path(path.parent_path().string() + "/");
 
     uint32_t i = 0;
-    for (auto & l : j["grids"]) {
+    for (auto & l : j["grid"]) {
         auto & g = info[i];
-        auto basicstr = folder.string() + std::string(l["filename"]) + ".";
+        auto basicstr = folder.string() + std::string(l["name"]) + ".";
 
-        g.path.row = fs::path(basicstr + std::string(j["ext"]["row"]));
-        g.path.ptr = fs::path(basicstr + std::string(j["ext"]["ptr"]));
-        g.path.col = fs::path(basicstr + std::string(j["ext"]["col"]));
+        g.path.row = fs::path(basicstr + std::string(j["extension"]["row"]));
+        g.path.ptr = fs::path(basicstr + std::string(j["extension"]["ptr"]));
+        g.path.col = fs::path(basicstr + std::string(j["extension"]["col"]));
 
         if (!fs::exists(g.path.row)) {
             std::cerr << "Not exists: " << g.path.row.string() << std::endl;
@@ -60,8 +60,8 @@ static void readMeta(fs::path const & path, std::vector<gridInfo_t> & info) {
             exit(EXIT_FAILURE);
         }
 
-        g.pos.row = l["row"];
-        g.pos.col = l["col"];
+        g.pos.row = l["index"]["row"];
+        g.pos.col = l["index"]["col"];
 
         i++;
     }

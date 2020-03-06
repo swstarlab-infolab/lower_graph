@@ -33,7 +33,7 @@ add_library(${_ITEM} ${_FILES})
 target_link_libraries(${_ITEM} pthread tbb stdc++fs)
 endforeach(_ITEM)
 
-foreach(_ITEM converter newconverter)
+foreach(_ITEM converter)
 file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
 add_executable(${_ITEM} ${_FILES})
 target_link_libraries(${_ITEM} pthread tbb stdc++fs dataformat)

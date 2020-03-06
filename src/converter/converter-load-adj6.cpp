@@ -1,17 +1,15 @@
-#include <dataformat.h>
+#include "converter.h"
 
 #include <iostream>
 #include <fstream>
 
 #define UNIT 6
 
-void readADJ6(fs::path const & folder, std::vector<edge_t> & edgelist) {
-    std::cout << ">>> Read ADJ6 Files" << std::endl;
-
+void GridCSRConverter::loadAdj6(fs::path const & folderPath) {
     uint64_t estimated = 0;
 
     std::ifstream fs;
-    for (auto & p : fs::recursive_directory_iterator(folder)) {
+    for (auto & p : fs::recursive_directory_iterator(folderPath)) {
         fs.open(p.path());
 
         fs.seekg(0, std::ios::end);
@@ -22,10 +20,6 @@ void readADJ6(fs::path const & folder, std::vector<edge_t> & edgelist) {
 
         fs.close();
     }
-
-    edgelist.resize(estimated);
-
-    std::cout << "complete: allocate memory of edgelist and buffer for ADJ6 files" << std::endl;
 
     std::vector<uint8_t> temp;
 
@@ -39,7 +33,7 @@ void readADJ6(fs::path const & folder, std::vector<edge_t> & edgelist) {
             (uint64_t(temp[i+5]) << (8*0));};
 
     uint64_t position = 0;
-    for (auto & p : fs::recursive_directory_iterator(folder)) {
+    for (auto & p : fs::recursive_directory_iterator(folderPath)) {
         fs.open(p.path());
 
         fs.seekg(0, std::ios::end);
@@ -53,24 +47,20 @@ void readADJ6(fs::path const & folder, std::vector<edge_t> & edgelist) {
 
         fs.close();
 
-        for (uint64_t i = 0; i < filesize;) {
-            uint64_t src = bigendian(i);
+        for (size_t i = 0; i < filesize;) {
+            vertex_t src = bigendian(i);
             i+=UNIT;
 
-            uint64_t size = bigendian(i);
+            size_t size = bigendian(i);
             i+=UNIT;
 
-            for (uint64_t j = 0; j < size; j++) {
-                uint64_t dst = bigendian(i);
+            for (size_t j = 0; j < size; j++) {
+                vertex_t dst = bigendian(i);
                 i+=UNIT;
 
-                edgelist[position] = edge_t{vertex_t(src), vertex_t(dst)};
+                this->insert(edge_t{src, dst});
                 position++;
             }
         }
     }
-
-    edgelist.resize(position);
-
-    std::cout << "complete: file read and parse to fill edgelist" << std::endl;
 }

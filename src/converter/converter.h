@@ -19,12 +19,16 @@ class GridCSRConverter {
 
     vertex_t _temp_src, _temp_dst;
 
-public:
-    GridCSRConverter(vertex_t const max_vid, vertex_t const grid_width);
     void insert(edge_t const & e);
-    void run();
+    void divideEdges();
     void genGCSR();
-    void write(fs::path const & folderPath, std::string const & dataName);
+
+public:
+    GridCSRConverter(vertex_t const grid_width) : gridCount(0), gridWidth(grid_width), maxVID(0) {}
+    void loadAdj6(fs::path const & folderPath);
+    void loadTSV(fs::path const & folderPath);
+    void run() { divideEdges(); genGCSR(); }
+    void storeGCSR(fs::path const & folderPath, std::string const & dataName);
 };
 
 #endif

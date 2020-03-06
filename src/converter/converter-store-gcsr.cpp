@@ -11,7 +11,7 @@ using json = nlohmann::json;
 #include <string>
 #include <iostream>
 
-void GridCSRConverter::write(fs::path const & folderPath, std::string const & dataName) {
+void GridCSRConverter::storeGCSR(fs::path const & folderPath, std::string const & dataName) {
     json j;
 
     j["dataname"] = dataName;
