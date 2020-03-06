@@ -5,10 +5,14 @@
 
 #include "common.h"
 
+#define CUDA_BLOCKS 160
+#define CUDA_THREADS 1024
+#define CUDA_STREAMS 4
 
 #ifndef CUDA_BLOCKS
 #define CUDA_BLOCKS 160
 #endif
+
 
 #ifndef CUDA_THREADS 
 #define CUDA_THREADS 1024

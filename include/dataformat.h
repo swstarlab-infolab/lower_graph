@@ -17,6 +17,8 @@ using vertex_t = uint32_t;
 // Edge Type
 struct edge_t { vertex_t src, dst; };
 
+#define FORMAT_GRID_POWER 24
+
 #ifndef FORMAT_GRID_POWER
 #define FORMAT_GRID_POWER 24
 #endif
