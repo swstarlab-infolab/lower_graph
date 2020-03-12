@@ -16,8 +16,6 @@ void GridCSRConverter::insert(edge_t const & e) {
         return;
     }
 
-    printf("(%d,%d)\n", this->_temp_src, this->_temp_dst);
-
     // Always _temp_src > _temp_dst
 
     if (this->_temp_src > this->maxVID) {

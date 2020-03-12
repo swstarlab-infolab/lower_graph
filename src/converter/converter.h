@@ -1,7 +1,7 @@
 #ifndef __CONVERTER_H__
 #define __CONVERTER_H__
 
-#include "common.h"
+#include "../common.h"
 
 #include <vector>
 #include <tbb/concurrent_vector.h>

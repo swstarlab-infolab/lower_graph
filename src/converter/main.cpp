@@ -1,8 +1,8 @@
-#include "common.h"
 #include "converter.h"
 
 #include <iostream>
 #include <string>
+#include <chrono>
 
 int main(int argc, char* argv[]) {
     if (argc != 6) {
@@ -19,16 +19,41 @@ int main(int argc, char* argv[]) {
 
     GridCSRConverter converter(1 << grid_width_power);
 
-    if (std::string(argv[1]) == "tsv") {
-        converter.loadTSV(inFolder);
-    } else if (std::string(argv[1]) == "adj6") {
-        converter.loadAdj6(inFolder);
-    } else {
-        return 0;
+    {
+        auto start = std::chrono::system_clock::now();
+
+        if (std::string(argv[1]) == "tsv") {
+            converter.loadTSV(inFolder);
+        } else if (std::string(argv[1]) == "adj6") {
+            converter.loadAdj6(inFolder);
+        } else {
+            return 0;
+        }
+
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> sec = end - start;
+        std::cout << "Complete: Load, time: " << sec.count() << "(sec)" << std::endl;
     }
 
-    converter.run();
-    converter.storeGCSR(outFolder, outDataName);
+    {
+        auto start = std::chrono::system_clock::now();
+
+        converter.run();
+
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> sec = end - start;
+        std::cout << "Complete: Convert, time: " << sec.count() << "(sec)" << std::endl;
+    }
+
+    {
+        auto start = std::chrono::system_clock::now();
+
+        converter.storeGCSR(outFolder, outDataName);
+
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> sec = end - start;
+        std::cout << "Complete: Store, time: " << sec.count() << "(sec)" << std::endl;
+    }
 
     return 0;
 }

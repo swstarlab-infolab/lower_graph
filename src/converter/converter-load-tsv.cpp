@@ -19,7 +19,6 @@ void GridCSRConverter::loadTSV(fs::path const & folder) {
 
         temp.resize(filesize);
         fs.read(temp.data(), filesize);
-
         fs.close();
 
         std::string current_line;
