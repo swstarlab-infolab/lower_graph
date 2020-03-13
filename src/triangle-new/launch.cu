@@ -14,11 +14,12 @@
 
 __global__ void gen_lookup_temp(
     vertex_t const * row,
+    vertex_t const * ptr,
     uint32_t const rowSize,
     lookup_t * lookup_temp)
 {
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < rowSize; i += gridDim.x * blockDim.x) {
-        lookup_temp[row[i]] = 1;
+        lookup_temp[row[i]] = ptr[i+1] - ptr[i];
     }
 }
 
@@ -62,7 +63,8 @@ __global__ static void kernel(
     bitmap_t * mybm1 = &bitmapLV1[(gridWidth >> EXP_BITMAP1) * blockIdx.x];
     count_t mycount = 0;
 
-    __shared__ int SHARED[1024];
+    //__shared__ int SHARED[1024];
+    __shared__ extern int SHARED[];
 
     for (uint32_t g1row_iter = blockIdx.x; g1row_iter < G1RowSize; g1row_iter += gridDim.x) {
 
@@ -71,7 +73,9 @@ __global__ static void kernel(
         // With "Existing Row" information: extremely faster than without-version
         auto const g1row = G1Row[g1row_iter];
 
-        auto const g1col_idx_s = G1Ptr[g1row], g1col_idx_e = G1Ptr[g1row+1];
+        if (lookupG2[g1row] == lookupG2[g1row + 1]) { continue; }
+
+        auto const g1col_idx_s = G1Ptr[g1row_iter], g1col_idx_e = G1Ptr[g1row_iter+1];
 
         // generate bitmap
         for (uint32_t g1col_idx = g1col_idx_s + threadIdx.x; g1col_idx < g1col_idx_e; g1col_idx += blockDim.x) {
@@ -88,6 +92,7 @@ __global__ static void kernel(
             for (uint32_t s = 0; s < blockDim.x; s++) {
                 int const g2col = SHARED[s];
                 if (g2col == -1) { break; }
+                if (lookupG0[g2col] == lookupG0[g2col + 1]) { continue; }
 
                 auto const g0col_idx_s = lookupG0[g2col], g0col_idx_e = lookupG0[g2col+1];
 
@@ -110,8 +115,6 @@ __global__ static void kernel(
         __syncthreads();
     }
 
-    //atomicAdd(count, mycount);
-
     for (uint8_t offset = 16; offset > 0; offset >>= 1) {
 		mycount += __shfl_down_sync(0xFFFFFFFF, mycount, offset);
 	}
@@ -120,112 +123,114 @@ __global__ static void kernel(
 }
 
 void launch(std::vector<device_setting_t> & dev) {
-    std::vector<count_t> globalCount(dev.size());
+    std::vector<count_t> globalCount(dev.size() * dev.front().gpu.setting.stream.size());
+
+    size_t streamIndex = 0;
+    size_t deviceIndex = 0;
+
+    auto next = [&dev, &deviceIndex, &streamIndex]() {
+        streamIndex++;
+        if (streamIndex / dev[deviceIndex].gpu.setting.stream.size()) {
+            streamIndex = 0;
+            deviceIndex++;
+            if (deviceIndex / dev.size()) {
+                deviceIndex = 0;
+            }
+        }
+    };
+
+    auto const gridCount = dev.front().mem.graph_meta.info.count.row;
+    auto const gridWidth = dev.front().mem.graph_meta.info.width.row;
 
     auto start = std::chrono::system_clock::now();
 
-    //tbb::parallel_for_each(dev.begin(), dev.end(), [&](device_setting_t & d) {
-    for (auto & d : dev) {
-        auto const & gridCount = d.mem.graph_meta.info.count.row;
-        auto const & gridWidth = d.mem.graph_meta.info.width.row;
-        auto & setting = d.gpu.setting;
+    for (size_t row = 0; row < gridCount; row++) {
+        for (size_t col = 0; col <= row; col++) {
+            for (size_t i = col; i <= row; i++) {
+                auto & d = dev[deviceIndex];
 
-        std::vector<count_t> localCount(setting.stream.size());
 
-        cudaSetDevice(d.gpu.meta.index);
+                auto const & G0 = d.mem.graph[i][col];
+                auto const & G1 = d.mem.graph[row][col];
+                auto const & G2 = d.mem.graph[row][i];
 
-        size_t streamIndex = 0;
-        for (size_t row = 0; row < gridCount; row++) {
-            for (size_t col = 0; col <= row; col++) {
-                for (size_t i = col; i <= row; i++) {
+                auto & mem = d.mem.stream[streamIndex];
 
-                    auto const & G0 = d.mem.graph[i][col];
-                    auto const & G1 = d.mem.graph[row][col];
-                    auto const & G2 = d.mem.graph[row][i];
+                auto & setting = d.gpu.setting;
 
-                    // cannot read mem?!?!?!??!
-                    auto & mem = d.mem.stream[streamIndex];
+                cudaSetDevice(d.gpu.meta.index); CUDACHECK();
 
-                    if (!(G0.row.count && G1.row.count && G2.row.count)) {
-                        continue;
-                    }
+                if (!(G0.row.count && G1.row.count && G2.row.count)) { continue; }
 
-                    gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                        G0.row.ptr,
-                        G0.row.count,
-                        mem.lookup.G0.ptr
-                    );
+                gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G0.row.ptr,
+                    G0.ptr.ptr, 
+                    G0.row.count,
+                    mem.lookup.temp.ptr
+                );
 
-                    /*
-                    cub::DeviceScan::ExclusiveSum(
-                        mem.cub.ptr,
-                        mem.cub.byte,
-                        mem.lookup.temp.ptr,
-                        mem.lookup.G0.ptr,
-                        mem.lookup.G0.byte(),
-                        setting.stream[streamIndex]);
+                cub::DeviceScan::ExclusiveSum(
+                    mem.cub.ptr,
+                    mem.cub.byte,
+                    mem.lookup.temp.ptr,
+                    mem.lookup.G0.ptr,
+                    mem.lookup.G0.count,
+                    setting.stream[streamIndex]);
 
-                    reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                        G0.row.ptr, 
-                        G0.row.count,
-                        mem.lookup.G0.ptr
-                    );
+                reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G0.row.ptr, 
+                    G0.row.count,
+                    mem.lookup.temp.ptr
+                );
 
-                    gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                        G2.row.ptr, 
-                        G2.row.count,
-                        mem.lookup.G2.ptr
-                    );
+                gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G2.row.ptr, 
+                    G2.ptr.ptr, 
+                    G2.row.count,
+                    mem.lookup.temp.ptr
+                );
 
-                    cub::DeviceScan::ExclusiveSum(
-                        mem.cub.ptr,
-                        mem.cub.byte,
-                        mem.lookup.temp.ptr,
-                        mem.lookup.G2.ptr,
-                        mem.lookup.G2.byte(),
-                        setting.stream[streamIndex]);
+                cub::DeviceScan::ExclusiveSum(
+                    mem.cub.ptr,
+                    mem.cub.byte,
+                    mem.lookup.temp.ptr,
+                    mem.lookup.G2.ptr,
+                    mem.lookup.G2.count,
+                    setting.stream[streamIndex]);
 
-                    reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                        G2.row.ptr,
-                        G2.row.count,
-                        mem.lookup.G2.ptr
-                    );
+                reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G2.row.ptr,
+                    G2.row.count,
+                    mem.lookup.temp.ptr
+                );
 
-                    kernel <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                        mem.lookup.G0.ptr, G0.col.ptr,
-                        G1.row.ptr, G1.ptr.ptr, G1.col.ptr,
-                        mem.lookup.G2.ptr, G2.col.ptr,
-                        G1.row.count,
-                        gridWidth,
-                        mem.bitmap.lv0.ptr, mem.bitmap.lv1.ptr,
-                        mem.count.ptr
-                    );
-                    */
+                kernel <<<setting.block, setting.thread, setting.thread, setting.stream[streamIndex]>>> (
+                    mem.lookup.G0.ptr, G0.col.ptr,
+                    G1.row.ptr, G1.ptr.ptr, G1.col.ptr,
+                    mem.lookup.G2.ptr, G2.col.ptr,
+                    G1.row.count,
+                    gridWidth,
+                    mem.bitmap.lv0.ptr, mem.bitmap.lv1.ptr,
+                    mem.count.ptr
+                );
 
-                    streamIndex++;
-                    if (streamIndex / setting.stream.size() != 0) {
-                        streamIndex = 0;
-                    }
-                }
+                next();
             }
         }
-
-        for (size_t i = 0; i < setting.stream.size(); i++) {
-            d.mem.stream[i].count.copy_d2h_async(&localCount[i], setting.stream[i]); CUDACHECK();
-            //cudaStreamSynchronize(setting.stream[i]); CUDACHECK();
-        }
-
-        cudaDeviceSynchronize();
-
-        for (size_t i = 1; i < setting.stream.size(); i++) {
-            localCount[0] += localCount[i];
-        }
-
-        globalCount[d.gpu.meta.index] = localCount[0];
     }
 
-    for (size_t i = 1; i < dev.size(); i++) {
-        globalCount[0] += globalCount[i];
+    for (auto & d : dev) {
+        cudaSetDevice(d.gpu.meta.index); CUDACHECK();
+        for (size_t i = 0; i < d.gpu.setting.stream.size(); i++) {
+            d.mem.stream[i].count.copy_d2h_async(&globalCount[dev.size() * d.gpu.meta.index + i], d.gpu.setting.stream[i]); CUDACHECK();
+        }
+        for (size_t i = 0; i < d.gpu.setting.stream.size(); i++) {
+            cudaStreamSynchronize(d.gpu.setting.stream[i]); CUDACHECK();
+        }
+    }
+
+    for (size_t i = 1; i < globalCount.size(); i++) {
+        globalCount.front() += globalCount[i];
     }
 
     std::chrono::duration<double> elapsed = std::chrono::system_clock::now() - start;

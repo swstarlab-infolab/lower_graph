@@ -10,8 +10,8 @@ project(GridCSR)
 #add_definitions(-DCUDA_THREADS=${CUDA_THREADS})
 
 set(CMAKE_CXX_COMPILER g++)
-#set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
-set(CMAKE_CXX_FLAGS "-Wall -O0 -std=c++17 -g")
+set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
+#set(CMAKE_CXX_FLAGS "-Wall -O0 -std=c++17 -g")
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 link_directories(${CMAKE_SOURCE_DIR}/lib)
@@ -24,8 +24,8 @@ set(CUDA_PROPAGATE_HOST_FLAGS OFF)
 
 list(APPEND CUDA_NVCC_FLAGS
     -gencode arch=compute_70,code=sm_70
-    -O0 -std=c++14 -g -lineinfo)
-    #-O3 -std=c++14)
+    #-O0 -std=c++14 -g -lineinfo)
+    -O3 -std=c++14)
 
 foreach(_ITEM meta)
 file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
