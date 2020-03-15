@@ -63,8 +63,8 @@ __global__ static void kernel(
     bitmap_t * mybm1 = &bitmapLV1[(gridWidth >> EXP_BITMAP1) * blockIdx.x];
     count_t mycount = 0;
 
-    //__shared__ int SHARED[1024];
-    __shared__ extern int SHARED[];
+    __shared__ int SHARED[1024];
+    //__shared__ extern int SHARED[];
 
     for (uint32_t g1row_iter = blockIdx.x; g1row_iter < G1RowSize; g1row_iter += gridDim.x) {
 
@@ -204,7 +204,8 @@ void launch(std::vector<device_setting_t> & dev) {
                     mem.lookup.temp.ptr
                 );
 
-                kernel <<<setting.block, setting.thread, setting.thread, setting.stream[streamIndex]>>> (
+                //kernel <<<setting.block, setting.thread, setting.thread, setting.stream[streamIndex]>>> (
+                kernel <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
                     mem.lookup.G0.ptr, G0.col.ptr,
                     G1.row.ptr, G1.ptr.ptr, G1.col.ptr,
                     mem.lookup.G2.ptr, G2.col.ptr,

@@ -80,6 +80,8 @@ void device_setting_t::load_meta(fs::path const & folderPath) {
     }
 }
 
+#include <tbb/parallel_for_each.h>
+
 void device_setting_t::load_graph(fs::path const & folderPath) {
     auto const & m = this->mem.graph_meta;
     cudaSetDevice(this->gpu.meta.index); CUDACHECK();
@@ -92,46 +94,49 @@ void device_setting_t::load_graph(fs::path const & folderPath) {
         r.resize(gridCount);
     }
 
-    for (auto in : m.grid.each) {
-        auto const basicString = folderPath.string() + std::string(in.name) + ".";
+    auto loader = [](std::ifstream & f, fs::path const & p, decltype(g.front().front().row) & d){
+        f.open(p);
 
-        auto const pathRow = fs::path(basicString + m.extension.row);
-        auto const pathPtr = fs::path(basicString + m.extension.ptr);
-        auto const pathCol = fs::path(basicString + m.extension.col);
+        f.seekg(0, std::ios::end);
+        auto const fileSize = f.tellg();
+        f.seekg(0, std::ios::beg);
 
-        if (!(fs::exists(pathRow) && fs::exists(pathPtr) && fs::exists(pathCol))) {
-            printf("Not exists: %s\n", in.name.c_str());
-            exit(EXIT_FAILURE);
-        }
+        auto const vertexCount = fileSize / sizeof(vertex_t);
+        std::vector<vertex_t> _temp(vertexCount);
 
-        size_t const rowIndex = in.index.row;
-        size_t const colIndex = in.index.col;
+        f.read((char*)_temp.data(), fileSize);
+        f.close();
 
+        d.alloc(vertexCount); CUDACHECK();
+        d.copy_h2d(_temp.data()); CUDACHECK();
 
-        auto loader = [](std::ifstream & f, fs::path const & p, decltype(g.front().front().row) & d){
-            f.open(p);
+        _temp.clear();
+    };
 
-            f.seekg(0, std::ios::end);
-            auto const fileSize = f.tellg();
-            f.seekg(0, std::ios::beg);
+    // if decltype is directely used on the site, the weird '__T1' error happened
+    using mGridEachFront = decltype(m.grid.each.front());
 
-            auto const vertexCount = fileSize / sizeof(vertex_t);
-            std::vector<vertex_t> _temp(vertexCount);
+    tbb::parallel_for_each(m.grid.each.begin(), m.grid.each.end(),
+        [this, &folderPath, &m, &loader](mGridEachFront & in){
+            auto const basicString = folderPath.string() + std::string(in.name) + ".";
 
-            f.read((char*)_temp.data(), fileSize);
-            f.close();
+            auto const pathRow = fs::path(basicString + m.extension.row);
+            auto const pathPtr = fs::path(basicString + m.extension.ptr);
+            auto const pathCol = fs::path(basicString + m.extension.col);
 
-            d.alloc(vertexCount); CUDACHECK();
-            d.copy_h2d(_temp.data()); CUDACHECK();
+            if (!(fs::exists(pathRow) && fs::exists(pathPtr) && fs::exists(pathCol))) {
+                printf("Not exists: %s\n", in.name.c_str());
+                exit(EXIT_FAILURE);
+            }
 
-            _temp.clear();
-        };
+            size_t const rowIndex = in.index.row;
+            size_t const colIndex = in.index.col;
 
-        std::ifstream f;
-        loader(f, pathRow, g[rowIndex][colIndex].row);
-        loader(f, pathPtr, g[rowIndex][colIndex].ptr);
-        loader(f, pathCol, g[rowIndex][colIndex].col);
-    }
+            std::ifstream f;
+            loader(f, pathRow, this->mem.graph[rowIndex][colIndex].row);
+            loader(f, pathPtr, this->mem.graph[rowIndex][colIndex].ptr);
+            loader(f, pathCol, this->mem.graph[rowIndex][colIndex].col);
+        });
 }
 
 device_setting_t::~device_setting_t() {
