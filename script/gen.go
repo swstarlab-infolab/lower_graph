@@ -90,7 +90,7 @@ func main() {
 		myoutfolder := "/mnt/nvme/GCSR/"
 		myformat := "tsv"
 
-		datasets := append(datasets, []datasetSetting{
+		datasets = append(datasets, []datasetSetting{
 			{
 				inputpath:   myinfolder,
 				outputpath:  myoutfolder,
@@ -150,7 +150,7 @@ func main() {
 		mydatasets := []datasetSetting{}
 		for i := 16; i <= 29; i++ {
 			RMATnumber := fmt.Sprintf("RMAT%02s", i)
-			mydatasets := append(mydatasets, datasetSetting{
+			mydatasets = append(mydatasets, datasetSetting{
 				inputpath:   myinfolder,
 				outputpath:  myoutfolder,
 				name:        RMATnumber,
@@ -160,7 +160,7 @@ func main() {
 			})
 		}
 
-		datasets := append(datasets, mydatasets...)
+		datasets = append(datasets, mydatasets...)
 	}()
 
 	go producer(work, done, datasets)
