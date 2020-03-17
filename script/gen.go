@@ -59,12 +59,14 @@ func producer(work chan []string, done chan bool, setting []datasetSetting) {
 func consumer(workerID int, bin string, work chan []string, done chan bool) {
 	for w := range work {
 		cmd := exec.Command(bin, w...)
-		stdout, e := cmd.Output()
-		basicLogString := "GRIDSIZE=" + strconv.Itoa(workerID) + " " + strings.Join(w, " ") + " : "
+		//stdout, e := cmd.Output()
+		_, e := cmd.Output()
+		basicLogString := "WORKER=" + strconv.Itoa(workerID) + " " + strings.Join(w, " ") + " : "
 		if e != nil {
 			log("error", basicLogString+strings.TrimSuffix(e.Error(), "\n"))
 		} else {
-			log("success", basicLogString+strings.TrimSuffix(string(stdout), "\n"))
+			//log("success", basicLogString+strings.TrimSuffix(string(stdout), "\n"))
+			log("success", basicLogString+"success")
 		}
 	}
 
@@ -76,7 +78,7 @@ func main() {
 
 	log("info", "Engaging Workers")
 
-	workerCount := 7
+	workerCount := 5
 
 	work := make(chan []string, 9)
 	done := make(chan bool, workerCount+1)
@@ -132,10 +134,10 @@ func main() {
 				maxGridSize: 26,
 			},
 			{
-				inputpath:   myinfolder,
-				outputpath:  myoutfolder,
-				name:        "com-friendster",
-				format:      myformat,
+				inputpath:  myinfolder,
+				outputpath: myoutfolder,
+				name:       "com-friendster",
+				format:     myformat,
 				minGridSize: 16,
 				maxGridSize: 27,
 			},
@@ -149,7 +151,7 @@ func main() {
 
 		mydatasets := []datasetSetting{}
 		for i := 16; i <= 29; i++ {
-			RMATnumber := fmt.Sprintf("RMAT%02s", i)
+			RMATnumber := fmt.Sprintf("RMAT%02d", i)
 			mydatasets = append(mydatasets, datasetSetting{
 				inputpath:   myinfolder,
 				outputpath:  myoutfolder,

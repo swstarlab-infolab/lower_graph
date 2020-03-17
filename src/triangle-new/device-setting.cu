@@ -15,13 +15,18 @@ void device_setting_t::init(
     uint32_t const thread,
     fs::path const & folderPath)
 {
+    auto & meta = this->gpu.meta;
+    meta.index = gpuIndex;
+    cudaSetDevice(meta.index); CUDACHECK();
+    cudaDeviceSynchronize();
+    cudaDeviceReset(); CUDACHECK();
+    cudaDeviceSynchronize();
+
     this->load_meta(folderPath);
     this->load_graph(folderPath);
 
     auto const & gridWidth = this->mem.graph_meta.info.width.row;
 
-    auto & meta = this->gpu.meta;
-    meta.index = gpuIndex;
     cudaSetDevice(meta.index); CUDACHECK();
     cudaGetDeviceProperties(&meta.info, meta.index); CUDACHECK();
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -39,6 +40,20 @@ func check(e error) {
 	}
 }
 
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 type datasetSetting struct {
 	basepath, name           string
 	minGridSize, maxGridSize int
@@ -48,13 +63,20 @@ func producer(work chan []string, done chan bool, setting []datasetSetting) {
 	maxThreads := 160 * 1024
 
 	for _, data := range setting {
-		for gridSize := data.maxGridSize; gridSize >= data.minGridSize; gridSize-- {
+
+		diff := min(data.maxGridSize-data.minGridSize, 6)
+
+		for gridSize := data.maxGridSize; gridSize >= data.maxGridSize-diff; gridSize-- {
 
 			filename := strings.Join([]string{data.name, "lt", strconv.Itoa(gridSize)}, "-")
 
-			for s := 1; s <= 2; s++ {
+			max(gridSize, 16)
+
+			maxStreamCount := min(int(math.Pow(2, float64(data.maxGridSize-gridSize))), 16)
+
+			for s := int(math.Ceil(float64(maxStreamCount) / float64(4))); s <= maxStreamCount; s++ {
 				for t := 1024; t >= 32; t /= 2 {
-					b := maxThreads / t
+					b := (maxThreads / s) / t
 					work <- []string{data.basepath + filename, strconv.Itoa(s), strconv.Itoa(b), strconv.Itoa(t)}
 				}
 			}
@@ -107,18 +129,60 @@ func main() {
 	log("info", "Engaging Workers")
 
 	bin := "/home/heeyong/grid-csr/build/triangle-new"
-	basePath := "/mnt/nvme-raid0/GCSR-New/"
+	basePath := "/mnt/nvme/GCSR/"
 
 	work := make(chan []string, 9)
 	done := make(chan bool, nvidiaGPUs+1)
 
-	datasets := []datasetSetting{
+	datasets := []datasetSetting{}
+
+	datasets = append(datasets, []datasetSetting{
+			{
+				basepath:    basePath,
+				name:        "wiki-Talk",
+				minGridSize: 16,
+				maxGridSize: 22,
+			},
+			{
+				basepath:    basePath,
+				name:        "cit-Patents",
+				minGridSize: 16,
+				maxGridSize: 23,
+			},
+			{
+				basepath:    basePath,
+				name:        "soc-LiveJournal1",
+				minGridSize: 16,
+				maxGridSize: 23,
+			},
+			{
+				basepath:    basePath,
+				name:        "com-orkut",
+				minGridSize: 16,
+				maxGridSize: 22,
+			},
+			{
+				basepath:    basePath,
+				name:        "twitter_rv.net",
+				minGridSize: 16,
+				maxGridSize: 26,
+			},
 		{
 			basepath:    basePath,
-			name:        "as20000102",
-			minGridSize: 10,
-			maxGridSize: 16,
+			name:        "com-friendster",
+			minGridSize: 16,
+			maxGridSize: 27,
 		},
+	}...)
+
+	for i := 26; i <= 28; i++ {
+		RMATnumber := fmt.Sprintf("RMAT%02d", i)
+		datasets = append(datasets, datasetSetting{
+			basepath:    basePath,
+			name:        RMATnumber,
+			minGridSize: 16,
+			maxGridSize: i,
+		})
 	}
 
 	go producer(work, done, datasets)
