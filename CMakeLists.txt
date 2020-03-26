@@ -1,14 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 project(GridCSR)
 
-#set(CUDA_STREAMS)
-#set(CUDA_BLOCKS)
-#set(CUDA_THREADS)
-
-#add_definitions(-DCUDA_STREAMS=${CUDA_STREAMS})
-#add_definitions(-DCUDA_BLOCKS=${CUDA_BLOCKS})
-#add_definitions(-DCUDA_THREADS=${CUDA_THREADS})
-
 set(CMAKE_CXX_COMPILER g++)
 set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
 #set(CMAKE_CXX_FLAGS "-Wall -O0 -std=c++17 -g")
@@ -36,14 +28,14 @@ file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
 add_library(${_ITEM} ${_FILES})
 endforeach(_ITEM)
 
-foreach(_ITEM converter)
+foreach(_ITEM converter-lt)
 file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
 add_executable(${_ITEM} ${_FILES})
 add_dependencies(${_ITEM} meta)
 target_link_libraries(${_ITEM} pthread tbb stdc++fs meta)
 endforeach(_ITEM)
 
-foreach(_ITEM triangle-new)
+foreach(_ITEM triangle-lt triangle-lt-bst)
 file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
 cuda_add_executable(${_ITEM} ${_FILES})
 add_dependencies(${_ITEM} meta)
