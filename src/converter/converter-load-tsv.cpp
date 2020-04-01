@@ -33,7 +33,22 @@ void GridCSRConverter::loadTSV(fs::path const & folder) {
             vertex_t src = atoi(ptr);
             ptr = strtok(nullptr, "\t");
             vertex_t dst = atoi(ptr);
-            this->insert(edge_t{src, dst});
+            if (this->mode.is_directed) {
+                using type = GridCSRConverterMode::SortingType;
+                switch (this->mode.sort_type) {
+                case type::not_sort:
+                    this->insert(edge_t{src, dst});
+                    break;
+                case type::lower_triangle:
+                    this->insertLowerTriangle(edge_t{src, dst});
+                    break;
+                case type::degree:
+                    this->insertUndirectedDegree(edge_t{src, dst});
+                    break;
+                }
+            } else {
+                this->insertUndirected(edge_t{src, dst});
+            }
         }
     }
 }

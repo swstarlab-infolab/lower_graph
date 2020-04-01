@@ -128,7 +128,7 @@ func main() {
 	log("info", "Total GPUs: "+strconv.Itoa(nvidiaGPUs))
 	log("info", "Engaging Workers")
 
-	bin := "/home/heeyong/grid-csr/build/triangle-new"
+	bin := "/home/heeyong/SSHFS/grid-csr/build/triangle-lt-bst"
 	basePath := "/mnt/nvme/GCSR/"
 
 	work := make(chan []string, 9)
@@ -175,7 +175,7 @@ func main() {
 		},
 	}...)
 
-	for i := 26; i <= 28; i++ {
+	for i := 20; i <= 28; i++ {
 		RMATnumber := fmt.Sprintf("RMAT%02d", i)
 		datasets = append(datasets, datasetSetting{
 			basepath:    basePath,

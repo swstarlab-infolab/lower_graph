@@ -61,7 +61,10 @@
         "typeinfo": "cpp",
         "valarray": "cpp",
         "__nullptr": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "__hash_table": "cpp",
+        "__tree": "cpp",
+        "queue": "cpp"
     },
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools"
 }

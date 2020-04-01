@@ -57,8 +57,22 @@ void GridCSRConverter::loadAdj6(fs::path const & folderPath) {
             for (size_t j = 0; j < size; j++) {
                 vertex_t dst = bigendian(i);
                 i+=UNIT;
-
-                this->insert(edge_t{src, dst});
+                if (this->mode.is_directed) {
+                    using type = GridCSRConverterMode::SortingType;
+                    switch (this->mode.sort_type) {
+                    case type::not_sort:
+                        this->insert(edge_t{src, dst});
+                        break;
+                    case type::lower_triangle:
+                        this->insertLowerTriangle(edge_t{src, dst});
+                        break;
+                    case type::degree:
+                        this->insertUndirectedDegree(edge_t{src, dst});
+                        break;
+                    }
+                } else {
+                    this->insertUndirected(edge_t{src, dst});
+                }
                 position++;
             }
         }

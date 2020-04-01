@@ -2,24 +2,16 @@
 
 #include <cmath>
 
-void GridCSRConverter::insert(edge_t const & e) {
-    if (e.src > e.dst) {
-        // Make lower triangular matrix
-        this->_temp_src = e.src;
-        this->_temp_dst = e.dst;
-    } else if (e.src < e.dst) {
-        // Make lower triangular matrix (flip)
-        this->_temp_src = e.dst;
-        this->_temp_dst = e.src;
-    } else {
+void GridCSRConverter::insertUndirected(edge_t const & e) {
+    if (e.src == e.dst) {
         // Skip self-loop
         return;
     }
 
-    // Always _temp_src > _temp_dst
+    auto const larger = (e.src > e.dst) ? e.src : e.dst;
 
-    if (this->_temp_src > this->maxVID) {
-        this->maxVID = this->_temp_src;
+    if (larger > this->maxVID) {
+        this->maxVID = larger;
 
         // update this gridCount
         size_t new_gridCount = (this->maxVID / float(this->gridWidth)) + 1;
@@ -54,6 +46,10 @@ void GridCSRConverter::insert(edge_t const & e) {
         }
     }
 
-    this->bin[this->_temp_src / this->gridWidth][this->_temp_dst / this->gridWidth]
-        .push_back(edge_t{this->_temp_src % this->gridWidth, this->_temp_dst % this->gridWidth});
+    // To make undirected graph, push both
+    this->bin[e.src / this->gridWidth][e.dst / this->gridWidth]
+        .push_back(edge_t{e.src % this->gridWidth, e.dst % this->gridWidth});
+
+    this->bin[e.dst / this->gridWidth][e.src / this->gridWidth]
+        .push_back(edge_t{e.dst % this->gridWidth, e.src % this->gridWidth});
 }
