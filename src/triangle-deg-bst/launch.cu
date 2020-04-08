@@ -9,9 +9,6 @@
 #include "tc.h"
 #include "device-setting.cuh"
 
-#include <cub/device/device_scan.cuh>
-#include <tbb/parallel_for_each.h>
-
 #include <cmath>
 
 __device__ static uint32_t ulog2floor(uint32_t x) {
