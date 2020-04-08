@@ -41,8 +41,25 @@ void device_setting_t::init(
     this->mem.stream.resize(setting.stream.size());
 
     for (auto & s : this->mem.stream) {
+        s.lookup.a.alloc(gridWidth + 1); CUDACHECK();
+        s.lookup.b.alloc(gridWidth + 1); CUDACHECK();
+        s.lookup.temp.alloc(gridWidth + 1); CUDACHECK();
+
+        s.lookup.a.zerofill(); CUDACHECK();
+        s.lookup.b.zerofill(); CUDACHECK();
+        s.lookup.temp.zerofill(); CUDACHECK();
+
         s.count.alloc(1); CUDACHECK();
         s.count.zerofill(); CUDACHECK();
+
+        cub::DeviceScan::ExclusiveSum(
+            s.cub.ptr,
+            s.cub.byte,
+            s.lookup.temp.ptr,
+            s.lookup.a.ptr,
+            s.lookup.a.count); CUDACHECK();
+
+        cudaMalloc(&s.cub.ptr, s.cub.byte); CUDACHECK();
     }
 }
 

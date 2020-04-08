@@ -117,12 +117,13 @@ __global__ static void kernel(kernelParameter kp)
         for (vertex_t pcolIter = Gpptr_s; pcolIter < Gpptr_e; pcolIter+=blockDim.x) {
             SHARED[threadIdx.x]
                     = (pcolIter + threadIdx.x < Gpptr_e) ?
-                        binarySearchPosition(G.b.row, G.b.rows, G.p.col[pcolIter+threadIdx.x]) : -1;
+                        binarySearchPosition(G.b.row, G.b.rows, G.p.col[pcolIter+threadIdx.x]) : -2;
 
             __syncthreads();
 
             for (uint32_t t = 0; t < blockDim.x; t++) {
                 int const bpos = SHARED[t];
+                if (bpos == -2) { break;} // very important for runtime. (x2 speedup)
                 if (bpos == -1) { continue; }
 
                 int const blen = G.b.ptr[bpos+1] - G.b.ptr[bpos];
@@ -182,13 +183,9 @@ void launch(std::vector<device_setting_t> & dev) {
 
             auto const & Gp = d.mem.graph[row][col];
 
-            printf("%d=>(%d,%d)\n", d.gpu.meta.index, row, col); 
-
             for (size_t col2 = 0; col2 < gridCount; col2++) {
-                auto const & Ga = d.mem.graph[col][col2];
-                auto const & Gb = d.mem.graph[row][col2];
-
-                printf("(%d,%d)(%d,%d)\n", col, col2, row, col2);
+                auto const & Ga = d.mem.graph[row][col2];
+                auto const & Gb = d.mem.graph[col][col2];
 
                 kernelParameter kp;
 
@@ -204,8 +201,8 @@ void launch(std::vector<device_setting_t> & dev) {
 
                 kernel<<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>>(kp);
 
-                next();
             }
+            next();
         }
     }
 
