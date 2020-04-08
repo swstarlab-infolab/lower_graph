@@ -14,28 +14,6 @@
 
 #include <cmath>
 
-__global__ void gen_lookup_temp(
-    vertex_t const * row,
-    vertex_t const * ptr,
-    uint32_t const rowSize,
-    lookup_t * lookup_temp)
-{
-    for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < rowSize; i += gridDim.x * blockDim.x) {
-        lookup_temp[row[i]] = ptr[i+1] - ptr[i];
-    }
-}
-
-__global__ void reset_lookup_temp(
-    vertex_t const * row,
-    uint32_t const rowSize,
-    lookup_t * lookup_temp)
-{
-    for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < rowSize; i += gridDim.x * blockDim.x) {
-        lookup_temp[row[i]] = 0;
-    }
-}
-
-
 __device__ static uint32_t ulog2floor(uint32_t x) {
     uint32_t r, q;
     r = (x > 0xFFFF) << 4; x >>= r;
@@ -78,60 +56,88 @@ __device__ static void intersection(
     }
 }
 
-__global__ static void kernel(
-    lookup_t const * lookupG0, vertex_t const * G0Col,
-    vertex_t const * G1Row, vertex_t const * G1Ptr, vertex_t const * G1Col,
-    lookup_t const * lookupG2, vertex_t const * G2Col,
-    count_t const G1RowSize,
-    count_t const gridWidth,
-    count_t * count)
+__device__ static int binarySearchPosition(
+    vertex_t const * Arr,
+    uint32_t const ArrLen,
+    vertex_t const candidate)
+{
+    //auto const maxLevel = uint32_t(ceil(log2(ArrLen + 1))) - 1;
+    // ceil(log2(a)) == floor(log2(a-1))+1
+    auto const maxLevel = ulog2floor(ArrLen);
+
+    int now = (ArrLen - 1) >> 1;
+
+    for (uint32_t level = 0; level <= maxLevel; level++) {
+        auto const movement = 1 << (maxLevel - level - 1);
+
+        if (now < 0) {
+            now += movement;
+        } else if (ArrLen <= now) {
+            now -= movement;
+        } else {
+            if (Arr[now] < candidate) {
+                now += movement;
+            } else if (candidate < Arr[now]) {
+                now -= movement;
+            } else {
+                return now;
+            }
+        }
+    }
+
+    return -1;
+}
+
+struct kernelParameter {
+    struct {
+        struct {
+            vertex_t *row, *ptr, *col;
+            vertex_t rows, ptrs, cols;
+        } p, a, b;
+    } G;
+
+    count_t *count;
+};
+
+__global__ static void kernel(kernelParameter kp)
 {
     count_t mycount = 0;
 
+    auto const & G = kp.G;
     __shared__ int SHARED[1024];
-    //__shared__ extern int SHARED[];
 
-    for (uint32_t g1row_iter = blockIdx.x; g1row_iter < G1RowSize; g1row_iter += gridDim.x) {
+    for (vertex_t prowIter = blockIdx.x; prowIter < G.p.rows; prowIter+=gridDim.x) {
+        int const apos = binarySearchPosition(G.a.row, G.a.rows, G.p.row[prowIter]);
+        if (apos == -1) { continue; }
+        int const alen = G.a.ptr[apos+1] - G.a.ptr[apos];
 
-        // This makes huge difference!!!
-        // Without "Existing Row" information: loop all 2^24 and check it all
-        // With "Existing Row" information: extremely faster than without-version
-        auto const g1row = G1Row[g1row_iter];
+        auto const Gpptr_s = G.p.ptr[prowIter];
+        auto const Gpptr_e = G.p.ptr[prowIter+1];
 
-        if (lookupG2[g1row] == lookupG2[g1row + 1]) { continue; }
-
-        auto const g1col_idx_s = G1Ptr[g1row_iter], g1col_idx_e = G1Ptr[g1row_iter+1];
-
-        // variable for binary tree intersection
-        auto const g1col_length = g1col_idx_e - g1col_idx_s;
-
-        auto const g2col_s = lookupG2[g1row], g2col_e = lookupG2[g1row+1];
-
-        for (uint32_t g2col_idx = g2col_s; g2col_idx < g2col_e; g2col_idx += blockDim.x) {
-            SHARED[threadIdx.x] = (g2col_idx + threadIdx.x < g2col_e) ? (int)G2Col[g2col_idx + threadIdx.x] : -1;
+        for (vertex_t pcolIter = Gpptr_s; pcolIter < Gpptr_e; pcolIter+=blockDim.x) {
+            SHARED[threadIdx.x]
+                    = (pcolIter + threadIdx.x < Gpptr_e) ?
+                        binarySearchPosition(G.b.row, G.b.rows, G.p.col[pcolIter+threadIdx.x]) : -1;
 
             __syncthreads();
 
-            for (uint32_t s = 0; s < blockDim.x; s++) {
-                int const g2col = SHARED[s];
-                if (g2col == -1) { break; }
-                if (lookupG0[g2col] == lookupG0[g2col + 1]) { continue; }
+            for (uint32_t t = 0; t < blockDim.x; t++) {
+                int const bpos = SHARED[t];
+                if (bpos == -1) { continue; }
 
-                auto const g0col_idx_s = lookupG0[g2col], g0col_idx_e = lookupG0[g2col+1];
+                int const blen = G.b.ptr[bpos+1] - G.b.ptr[bpos];
 
-                // variable for binary tree intersection
-                auto const g0col_length = g0col_idx_e - g0col_idx_s;
-
-                if (g1col_length >= g0col_length) {
-                    for (uint32_t g0col_idx = g0col_idx_s + threadIdx.x; g0col_idx < g0col_idx_e; g0col_idx += blockDim.x) {
-                        intersection(&G1Col[g1col_idx_s], g1col_length, G0Col[g0col_idx], &mycount);
+                if (alen > blen) {
+                    for (vertex_t bcolIter = G.b.ptr[bpos]+threadIdx.x; bcolIter < G.b.ptr[bpos+1]; bcolIter+=blockDim.x) {
+                        intersection(&G.a.col[G.a.ptr[apos]], alen, G.b.col[bcolIter], &mycount);
                     }
                 } else {
-                    for (uint32_t g1col_idx = g1col_idx_s + threadIdx.x; g1col_idx < g1col_idx_e; g1col_idx += blockDim.x) {
-                        intersection(&G0Col[g0col_idx_s], g0col_length, G1Col[g1col_idx], &mycount);
+                    for (vertex_t acolIter = G.a.ptr[apos]+threadIdx.x; acolIter < G.a.ptr[apos+1]; acolIter+=blockDim.x) {
+                        intersection(&G.b.col[G.b.ptr[bpos]], blen, G.a.col[acolIter], &mycount);
                     }
                 }
             }
+
             __syncthreads();
         }
     }
@@ -140,7 +146,7 @@ __global__ static void kernel(
 		mycount += __shfl_down_sync(0xFFFFFFFF, mycount, offset);
 	}
 
-	if ((threadIdx.x & 31) == 0) { atomicAdd(count, mycount); }
+	if ((threadIdx.x & 31) == 0) { atomicAdd(kp.count, mycount); }
 }
 
 void launch(std::vector<device_setting_t> & dev) {
@@ -165,75 +171,38 @@ void launch(std::vector<device_setting_t> & dev) {
 
     auto start = std::chrono::system_clock::now();
 
+
     for (size_t row = 0; row < gridCount; row++) {
-        for (size_t col = 0; col <= row; col++) {
-            for (size_t i = col; i <= row; i++) {
-                auto & d = dev[deviceIndex];
+        for (size_t col = 0; col < gridCount; col++) {
+            auto & d = dev[deviceIndex];
+            cudaSetDevice(d.gpu.meta.index); CUDACHECK();
 
+            auto & mem = d.mem.stream[streamIndex];
+            auto & setting = d.gpu.setting;
 
-                auto const & G0 = d.mem.graph[i][col];
-                auto const & G1 = d.mem.graph[row][col];
-                auto const & G2 = d.mem.graph[row][i];
+            auto const & Gp = d.mem.graph[row][col];
 
-                auto & mem = d.mem.stream[streamIndex];
+            printf("%d=>(%d,%d)\n", d.gpu.meta.index, row, col); 
 
-                auto & setting = d.gpu.setting;
+            for (size_t col2 = 0; col2 < gridCount; col2++) {
+                auto const & Ga = d.mem.graph[col][col2];
+                auto const & Gb = d.mem.graph[row][col2];
 
-                cudaSetDevice(d.gpu.meta.index); CUDACHECK();
+                printf("(%d,%d)(%d,%d)\n", col, col2, row, col2);
 
-                if (!(G0.row.count && G1.row.count && G2.row.count)) { continue; }
+                kernelParameter kp;
 
-                gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                    G0.row.ptr,
-                    G0.ptr.ptr, 
-                    G0.row.count,
-                    mem.lookup.temp.ptr
-                );
+                kp.G.p.row = Gp.row.ptr; kp.G.p.ptr = Gp.ptr.ptr; kp.G.p.col = Gp.col.ptr;
+                kp.G.a.row = Ga.row.ptr; kp.G.a.ptr = Ga.ptr.ptr; kp.G.a.col = Ga.col.ptr;
+                kp.G.b.row = Gb.row.ptr; kp.G.b.ptr = Gb.ptr.ptr; kp.G.b.col = Gb.col.ptr;
 
-                cub::DeviceScan::ExclusiveSum(
-                    mem.cub.ptr,
-                    mem.cub.byte,
-                    mem.lookup.temp.ptr,
-                    mem.lookup.G0.ptr,
-                    mem.lookup.G0.count,
-                    setting.stream[streamIndex]);
+                kp.G.p.rows = Gp.row.count; kp.G.p.ptrs = Gp.ptr.count; kp.G.p.cols = Gp.col.count; 
+                kp.G.a.rows = Ga.row.count; kp.G.a.ptrs = Ga.ptr.count; kp.G.a.cols = Ga.col.count; 
+                kp.G.b.rows = Gb.row.count; kp.G.b.ptrs = Gb.ptr.count; kp.G.b.cols = Gb.col.count; 
 
-                reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                    G0.row.ptr, 
-                    G0.row.count,
-                    mem.lookup.temp.ptr
-                );
+                kp.count = mem.count.ptr;
 
-                gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                    G2.row.ptr, 
-                    G2.ptr.ptr, 
-                    G2.row.count,
-                    mem.lookup.temp.ptr
-                );
-
-                cub::DeviceScan::ExclusiveSum(
-                    mem.cub.ptr,
-                    mem.cub.byte,
-                    mem.lookup.temp.ptr,
-                    mem.lookup.G2.ptr,
-                    mem.lookup.G2.count,
-                    setting.stream[streamIndex]);
-
-                reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                    G2.row.ptr,
-                    G2.row.count,
-                    mem.lookup.temp.ptr
-                );
-
-                //kernel <<<setting.block, setting.thread, setting.thread, setting.stream[streamIndex]>>> (
-                kernel <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
-                    mem.lookup.G0.ptr, G0.col.ptr,
-                    G1.row.ptr, G1.ptr.ptr, G1.col.ptr,
-                    mem.lookup.G2.ptr, G2.col.ptr,
-                    G1.row.count,
-                    gridWidth,
-                    mem.count.ptr
-                );
+                kernel<<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>>(kp);
 
                 next();
             }

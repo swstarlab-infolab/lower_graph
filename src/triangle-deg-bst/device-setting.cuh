@@ -50,15 +50,6 @@ struct device_setting_t {
     struct {
     private:
         struct __mem_per_stream_t {
-            struct {
-                device_memory_t<lookup_t> G0, G2, temp;
-            } lookup;
-
-            struct {
-                void * ptr;
-                uint64_t byte;
-            } cub;
-
             device_memory_t<count_t> count;
         };
 
