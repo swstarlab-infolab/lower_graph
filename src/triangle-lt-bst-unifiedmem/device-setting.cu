@@ -41,12 +41,6 @@ void device_setting_t::init(
     this->mem.stream.resize(setting.stream.size());
 
     for (auto & s : this->mem.stream) {
-        s.bitmap.lv0.alloc(setting.block * ceil(gridWidth / float(1 << EXP_BITMAP0))); CUDACHECK();
-        s.bitmap.lv1.alloc(setting.block * ceil(gridWidth / float(1 << EXP_BITMAP1))); CUDACHECK();
-
-        s.bitmap.lv0.zerofill(); CUDACHECK();
-        s.bitmap.lv1.zerofill(); CUDACHECK();
-
         s.lookup.G0.alloc(gridWidth + 1); CUDACHECK();
         s.lookup.G2.alloc(gridWidth + 1); CUDACHECK();
         s.lookup.temp.alloc(gridWidth + 1); CUDACHECK();

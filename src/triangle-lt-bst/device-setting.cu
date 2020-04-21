@@ -60,7 +60,9 @@ void device_setting_t::init(
             s.lookup.G0.count); CUDACHECK();
 
         cudaMalloc(&s.cub.ptr, s.cub.byte); CUDACHECK();
+
     }
+
 }
 
 void device_setting_t::load_meta(fs::path const & folderPath) {
@@ -77,6 +79,7 @@ void device_setting_t::load_meta(fs::path const & folderPath) {
         printf("Not appropriate grid width! Abort process.\n");
         exit(EXIT_FAILURE);
     }
+
 }
 
 #include <tbb/parallel_for_each.h>
@@ -94,6 +97,7 @@ void device_setting_t::load_graph(fs::path const & folderPath) {
     }
 
     auto loader = [](std::ifstream & f, fs::path const & p, decltype(g.front().front().row) & d){
+
         f.open(p);
 
         f.seekg(0, std::ios::end);
@@ -132,6 +136,7 @@ void device_setting_t::load_graph(fs::path const & folderPath) {
             size_t const colIndex = in.index.col;
 
             std::ifstream f;
+            cudaSetDevice(this->gpu.meta.index); CUDACHECK();
             loader(f, pathRow, this->mem.graph[rowIndex][colIndex].row);
             loader(f, pathPtr, this->mem.graph[rowIndex][colIndex].ptr);
             loader(f, pathCol, this->mem.graph[rowIndex][colIndex].col);
@@ -141,8 +146,15 @@ void device_setting_t::load_graph(fs::path const & folderPath) {
 device_setting_t::~device_setting_t() {
     cudaSetDevice(this->gpu.meta.index); CUDACHECK();
 
+    auto sc = 0;
     for (auto & s : this->gpu.setting.stream) {
+        if (this->mem.stream[sc].cub.ptr) {
+            if (cudaSuccess != cudaFree(this->mem.stream[sc].cub.ptr)) {
+                printf("cudaFree failed for stream %d, gpu %d", sc, this->gpu.meta.index);
+            }
+        }
         cudaStreamDestroy(s); CUDACHECK();
+        sc++;
     }
 
     cudaDeviceReset(); CUDACHECK();

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -68,17 +67,13 @@ func producer(work chan []string, done chan bool, setting []datasetSetting) {
 
 		for gridSize := data.maxGridSize; gridSize >= data.maxGridSize-diff; gridSize-- {
 
-			filename := strings.Join([]string{data.name, "lt", strconv.Itoa(gridSize)}, "-")
+			filename := strings.Join([]string{data.name, "deg", strconv.Itoa(gridSize)}, "-")
 
 			max(gridSize, 16)
 
-			maxStreamCount := min(int(math.Pow(2, float64(data.maxGridSize-gridSize))), 16)
-
-			for s := int(math.Ceil(float64(maxStreamCount) / float64(4))); s <= maxStreamCount; s++ {
-				for t := 1024; t >= 32; t /= 2 {
-					b := (maxThreads / s) / t
-					work <- []string{data.basepath + filename, strconv.Itoa(s), strconv.Itoa(b), strconv.Itoa(t)}
-				}
+			for t := 1024; t >= 32; t /= 2 {
+				b := (maxThreads / 2) / t
+				work <- []string{data.basepath + filename, strconv.Itoa(2), strconv.Itoa(b), strconv.Itoa(t)}
 			}
 		}
 	}
@@ -128,7 +123,7 @@ func main() {
 	log("info", "Total GPUs: "+strconv.Itoa(nvidiaGPUs))
 	log("info", "Engaging Workers")
 
-	bin := "/home/heeyong/SSHFS/grid-csr/build/triangle-lt-bst"
+	bin := "/home/heeyong/SSHFS/grid-csr/build/triangle-deg-bst"
 	basePath := "/mnt/nvme/GCSR/"
 
 	work := make(chan []string, 9)
@@ -140,38 +135,38 @@ func main() {
 			{
 				basepath:    basePath,
 				name:        "wiki-Talk",
-				minGridSize: 16,
-				maxGridSize: 22,
+				minGridSize: 24,
+				maxGridSize: 24,
 			},
 			{
 				basepath:    basePath,
 				name:        "cit-Patents",
-				minGridSize: 16,
-				maxGridSize: 23,
+				minGridSize: 24,
+				maxGridSize: 24,
 			},
 			{
 				basepath:    basePath,
 				name:        "soc-LiveJournal1",
-				minGridSize: 16,
-				maxGridSize: 23,
+				minGridSize: 24,
+				maxGridSize: 24,
 			},
 			{
 				basepath:    basePath,
 				name:        "com-orkut",
-				minGridSize: 16,
-				maxGridSize: 22,
+				minGridSize: 24,
+				maxGridSize: 24,
 			},
 			{
 				basepath:    basePath,
 				name:        "twitter_rv.net",
-				minGridSize: 16,
-				maxGridSize: 26,
+				minGridSize: 24,
+				maxGridSize: 24,
 			},
 		{
 			basepath:    basePath,
 			name:        "com-friendster",
-			minGridSize: 16,
-			maxGridSize: 27,
+			minGridSize: 24,
+			maxGridSize: 24,
 		},
 	}...)
 
@@ -180,8 +175,8 @@ func main() {
 		datasets = append(datasets, datasetSetting{
 			basepath:    basePath,
 			name:        RMATnumber,
-			minGridSize: 16,
-			maxGridSize: i,
+			minGridSize: 24,
+			maxGridSize: 24,
 		})
 	}
 

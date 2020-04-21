@@ -223,8 +223,12 @@ void launch(std::vector<device_setting_t> & dev) {
     for (auto & d : dev) {
         cudaSetDevice(d.gpu.meta.index); CUDACHECK();
         for (size_t i = 0; i < d.gpu.setting.stream.size(); i++) {
-            d.mem.stream[i].count.copy_d2h_async(&globalCount[dev.size() * d.gpu.meta.index + i], d.gpu.setting.stream[i]); CUDACHECK();
+            d.mem.stream[i].count.copy_d2h_async(&globalCount[d.gpu.setting.stream.size() * d.gpu.meta.index + i], d.gpu.setting.stream[i]); CUDACHECK();
         }
+    }
+
+    for (auto & d : dev) {
+        cudaSetDevice(d.gpu.meta.index); CUDACHECK();
         for (size_t i = 0; i < d.gpu.setting.stream.size(); i++) {
             cudaStreamSynchronize(d.gpu.setting.stream[i]); CUDACHECK();
         }

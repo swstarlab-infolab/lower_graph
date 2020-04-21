@@ -23,8 +23,6 @@ void device_setting_t::init(
     this->load_meta(folderPath);
     this->load_graph(folderPath);
 
-    auto const & gridWidth = this->mem.graph_meta.info.width.row;
-
     cudaSetDevice(meta.index); CUDACHECK();
     cudaGetDeviceProperties(&meta.info, meta.index); CUDACHECK();
 
@@ -113,6 +111,7 @@ void device_setting_t::load_graph(fs::path const & folderPath) {
             size_t const colIndex = in.index.col;
 
             std::ifstream f;
+            cudaSetDevice(this->gpu.meta.index); CUDACHECK();
             loader(f, pathRow, this->mem.graph[rowIndex][colIndex].row);
             loader(f, pathPtr, this->mem.graph[rowIndex][colIndex].ptr);
             loader(f, pathCol, this->mem.graph[rowIndex][colIndex].col);
