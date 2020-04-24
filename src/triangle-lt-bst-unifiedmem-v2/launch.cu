@@ -1,0 +1,268 @@
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+
+#include <iostream>
+#include <chrono>
+#include <array>
+
+#include "../common.h"
+#include "tc.h"
+#include "device-setting.cuh"
+
+#include <cub/device/device_scan.cuh>
+#include <tbb/parallel_for_each.h>
+
+#include <cmath>
+
+__global__ void gen_lookup_temp(
+    vertex_t const * row,
+    vertex_t const * ptr,
+    uint32_t const rowSize,
+    lookup_t * lookup_temp)
+{
+    for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < rowSize; i += gridDim.x * blockDim.x) {
+        lookup_temp[row[i]] = ptr[i+1] - ptr[i];
+    }
+}
+
+__global__ void reset_lookup_temp(
+    vertex_t const * row,
+    uint32_t const rowSize,
+    lookup_t * lookup_temp)
+{
+    for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < rowSize; i += gridDim.x * blockDim.x) {
+        lookup_temp[row[i]] = 0;
+    }
+}
+
+
+__device__ static uint32_t ulog2floor(uint32_t x) {
+    uint32_t r, q;
+    r = (x > 0xFFFF) << 4; x >>= r;
+    q = (x > 0xFF  ) << 3; x >>= q; r |= q;
+    q = (x > 0xF   ) << 2; x >>= q; r |= q;
+    q = (x > 0x3   ) << 1; x >>= q; r |= q;
+                                   
+    return (r | (x >> 1));
+}
+
+__device__ static void intersection(
+    vertex_t const * Arr,
+    uint32_t const ArrLen,
+    vertex_t const candidate,
+    count_t * count)
+{
+    //auto const maxLevel = uint32_t(ceil(log2(ArrLen + 1))) - 1;
+    // ceil(log2(a)) == floor(log2(a-1))+1
+    auto const maxLevel = ulog2floor(ArrLen);
+
+    int now = (ArrLen - 1) >> 1;
+
+    for (uint32_t level = 0; level <= maxLevel; level++) {
+        auto const movement = 1 << (maxLevel - level - 1);
+
+        if (now < 0) {
+            now += movement;
+        } else if (ArrLen <= now) {
+            now -= movement;
+        } else {
+            if (Arr[now] < candidate) {
+                now += movement;
+            } else if (candidate < Arr[now]) {
+                now -= movement;
+            } else {
+                (*count)++;
+                break;
+            }
+        }
+    }
+}
+
+__global__ static void kernel(
+    lookup_t const * lookupG0, vertex_t const * G0Col,
+    vertex_t const * G1Row, vertex_t const * G1Ptr, vertex_t const * G1Col,
+    lookup_t const * lookupG2, vertex_t const * G2Col,
+    count_t const G1RowSize,
+    count_t const gridWidth,
+    count_t * count)
+{
+    count_t mycount = 0;
+
+    __shared__ int SHARED[1024];
+    //__shared__ extern int SHARED[];
+
+    for (uint32_t g1row_iter = blockIdx.x; g1row_iter < G1RowSize; g1row_iter += gridDim.x) {
+
+        // This makes huge difference!!!
+        // Without "Existing Row" information: loop all 2^24 and check it all
+        // With "Existing Row" information: extremely faster than without-version
+        auto const g1row = G1Row[g1row_iter];
+
+        if (lookupG2[g1row] == lookupG2[g1row + 1]) { continue; }
+
+        auto const g1col_idx_s = G1Ptr[g1row_iter], g1col_idx_e = G1Ptr[g1row_iter+1];
+
+        // variable for binary tree intersection
+        auto const g1col_length = g1col_idx_e - g1col_idx_s;
+
+        auto const g2col_s = lookupG2[g1row], g2col_e = lookupG2[g1row+1];
+
+        for (uint32_t g2col_idx = g2col_s; g2col_idx < g2col_e; g2col_idx += blockDim.x) {
+            SHARED[threadIdx.x] = (g2col_idx + threadIdx.x < g2col_e) ? (int)G2Col[g2col_idx + threadIdx.x] : -1;
+
+            __syncthreads();
+
+            for (uint32_t s = 0; s < blockDim.x; s++) {
+                int const g2col = SHARED[s];
+                if (g2col == -1) { break; }
+                if (lookupG0[g2col] == lookupG0[g2col + 1]) { continue; }
+
+                auto const g0col_idx_s = lookupG0[g2col], g0col_idx_e = lookupG0[g2col+1];
+
+                // variable for binary tree intersection
+                auto const g0col_length = g0col_idx_e - g0col_idx_s;
+
+                if (g1col_length >= g0col_length) {
+                    for (uint32_t g0col_idx = g0col_idx_s + threadIdx.x; g0col_idx < g0col_idx_e; g0col_idx += blockDim.x) {
+                        intersection(&G1Col[g1col_idx_s], g1col_length, G0Col[g0col_idx], &mycount);
+                    }
+                } else {
+                    for (uint32_t g1col_idx = g1col_idx_s + threadIdx.x; g1col_idx < g1col_idx_e; g1col_idx += blockDim.x) {
+                        intersection(&G0Col[g0col_idx_s], g0col_length, G1Col[g1col_idx], &mycount);
+                    }
+                }
+            }
+            __syncthreads();
+        }
+    }
+
+    for (uint8_t offset = 16; offset > 0; offset >>= 1) {
+		mycount += __shfl_down_sync(0xFFFFFFFF, mycount, offset);
+	}
+
+	if ((threadIdx.x & 31) == 0) { atomicAdd(count, mycount); }
+}
+
+void launch(std::vector<device_setting_t> & dev, unified_setting_t & umem) {
+    std::vector<count_t> globalCount(dev.size() * dev.front().gpu.setting.stream.size());
+
+    size_t streamIndex = 0;
+    size_t deviceIndex = 0;
+
+    auto next = [&dev, &deviceIndex, &streamIndex]() {
+        streamIndex++;
+        if (streamIndex / dev[deviceIndex].gpu.setting.stream.size()) {
+            streamIndex = 0;
+            deviceIndex++;
+            if (deviceIndex / dev.size()) {
+                deviceIndex = 0;
+            }
+        }
+    };
+
+    auto const gridCount = umem.meta.info.count.row;
+    auto const gridWidth = umem.meta.info.width.row;
+
+    auto start = std::chrono::system_clock::now();
+
+    for (size_t row = 0; row < gridCount; row++) {
+        for (size_t col = 0; col <= row; col++) {
+            for (size_t i = col; i <= row; i++) {
+                auto & d = dev[deviceIndex];
+
+                auto const & G0 = umem.graph[i][col];
+                auto const & G1 = umem.graph[row][col];
+                auto const & G2 = umem.graph[row][i];
+
+                auto & mem = d.mem.stream[streamIndex];
+
+                auto & setting = d.gpu.setting;
+
+                //cudaSetDevice(d.gpu.meta.index); CUDACHECK();
+
+                if (!(G0.row.count && G1.row.count && G2.row.count)) { continue; }
+
+                cudaMemPrefetchAsync(G0.row.ptr, G0.row.count * sizeof(*G0.row.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+                cudaMemPrefetchAsync(G0.ptr.ptr, G0.ptr.count * sizeof(*G0.ptr.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+
+                gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G0.row.ptr,
+                    G0.ptr.ptr, 
+                    G0.row.count,
+                    mem.lookup.temp.ptr
+                );
+
+                cub::DeviceScan::ExclusiveSum(
+                    mem.cub.ptr,
+                    mem.cub.byte,
+                    mem.lookup.temp.ptr,
+                    mem.lookup.G0.ptr,
+                    mem.lookup.G0.count,
+                    setting.stream[streamIndex]);
+
+                reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G0.row.ptr, 
+                    G0.row.count,
+                    mem.lookup.temp.ptr
+                );
+
+                cudaMemPrefetchAsync(G2.row.ptr, G2.row.count * sizeof(*G0.row.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+                cudaMemPrefetchAsync(G2.ptr.ptr, G2.ptr.count * sizeof(*G0.ptr.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+
+                gen_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G2.row.ptr, 
+                    G2.ptr.ptr, 
+                    G2.row.count,
+                    mem.lookup.temp.ptr
+                );
+
+                cub::DeviceScan::ExclusiveSum(
+                    mem.cub.ptr,
+                    mem.cub.byte,
+                    mem.lookup.temp.ptr,
+                    mem.lookup.G2.ptr,
+                    mem.lookup.G2.count,
+                    setting.stream[streamIndex]);
+
+                reset_lookup_temp <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    G2.row.ptr,
+                    G2.row.count,
+                    mem.lookup.temp.ptr
+                );
+
+                cudaMemPrefetchAsync(G1.row.ptr, G1.row.count * sizeof(*G1.row.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+                cudaMemPrefetchAsync(G1.ptr.ptr, G1.ptr.count * sizeof(*G1.ptr.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+                cudaMemPrefetchAsync(G1.col.ptr, G1.col.count * sizeof(*G1.col.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+                cudaMemPrefetchAsync(G0.col.ptr, G0.col.count * sizeof(*G0.col.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+                cudaMemPrefetchAsync(G2.col.ptr, G2.col.count * sizeof(*G0.col.ptr), d.gpu.meta.index, setting.stream[streamIndex]);
+                //kernel <<<setting.block, setting.thread, setting.thread, setting.stream[streamIndex]>>> (
+                kernel <<<setting.block, setting.thread, 0, setting.stream[streamIndex]>>> (
+                    mem.lookup.G0.ptr, G0.col.ptr,
+                    G1.row.ptr, G1.ptr.ptr, G1.col.ptr,
+                    mem.lookup.G2.ptr, G2.col.ptr,
+                    G1.row.count,
+                    gridWidth,
+                    mem.count.ptr
+                );
+
+                next();
+            }
+        }
+    }
+
+    for (auto & d : dev) {
+        //cudaSetDevice(d.gpu.meta.index); CUDACHECK();
+        for (size_t i = 0; i < d.gpu.setting.stream.size(); i++) {
+            //d.mem.stream[i].count.copy_d2h_async(&globalCount[d.gpu.setting.stream.size() * d.gpu.meta.index + i], d.gpu.setting.stream[i]); CUDACHECK();
+        }
+    }
+
+    cudaDeviceSynchronize();
+
+    for (size_t i = 1; i < globalCount.size(); i++) {
+        globalCount.front() += globalCount[i];
+    }
+
+    std::chrono::duration<double> elapsed = std::chrono::system_clock::now() - start;
+    std::cout << globalCount.front() << "," << elapsed.count() << std::endl;
+}

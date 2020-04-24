@@ -1,4 +1,3 @@
-
 #include <string>
 
 #include <fstream>
@@ -8,7 +7,6 @@
 #include <algorithm>
 #include <cuda_runtime.h>
 #include "device-setting.cuh"
-#include <thread>
 
 #include "tc.h"
 #include "../common.h"
@@ -26,20 +24,23 @@ int main(int argc, char * argv[]) {
 
     int deviceCount = 0;
     cudaGetDeviceCount(&deviceCount);
+
+    printf("Start in-memory allocation\n");
     std::vector<device_setting_t> dev(deviceCount);
-    std::vector<std::thread> p(deviceCount);
-
-    for (int i = 0; i < deviceCount; i++) {
-        p[i] = std::thread([&dev, i, &streamCount, &blockCount, &threadCount, &pathFolder]{
-            dev[i].init(i, streamCount, blockCount, threadCount, pathFolder);
-        });
+    auto gridWidth = getGridWidth(pathFolder);
+    for (uint32_t i = 0; i < dev.size(); i++) {
+        dev[i].init(i, streamCount, blockCount, threadCount, gridWidth);
+        printf("Complete in-memory allocation: GPU%d\n", i);
     }
 
-    for (int i = 0; i < deviceCount; i++) {
-        p[i].join();
-    }
+    printf("Start unified memory allocation\n");
+    unified_setting_t umem;
+    umem.load_graph(pathFolder);
+    printf("Complete unified memory allocation\n");
 
-    launch(dev);
+    printf("Launch CUDA kernel\n");
+    launch(dev, umem);
+    printf("Complete CUDA kernel\n");
 
     return 0;
 }

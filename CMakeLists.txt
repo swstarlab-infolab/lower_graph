@@ -35,7 +35,7 @@ add_dependencies(${_ITEM} meta)
 target_link_libraries(${_ITEM} pthread tbb stdc++fs meta)
 endforeach(_ITEM)
 
-foreach(_ITEM triangle-lt triangle-lt-bst triangle-deg-bst triangle-lt-bst-unifiedmem)
+foreach(_ITEM inspect triangle-lt triangle-lt-bst triangle-deg-bst triangle-lt-bst-unifiedmem triangle-lt-bst-unifiedmem-v2)
 file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
 cuda_add_executable(${_ITEM} ${_FILES})
 add_dependencies(${_ITEM} meta)
