@@ -102,8 +102,12 @@ struct CudaManagedMemory : public CudaMemory<T> {
         return cudaMallocManaged((void**)&this->pointer, this->byteSize);
     }
 
-    __host__ cudaError_t prefetchAsync(int deviceNumber, cudaStream_t & stream = 0) {
+    __host__ cudaError_t prefetchAsync(int const deviceNumber, cudaStream_t & stream) const {
         return cudaMemPrefetchAsync(this->pointer, this->byteSize, deviceNumber, stream);
+    }
+
+    __host__ cudaError_t advise(int const deviceNumber, cudaMemoryAdvise adv) const {
+        return cudaMemAdvise(this->pointer, this->byteSize, adv, deviceNumber);
     }
 };
 
