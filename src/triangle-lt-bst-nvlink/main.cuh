@@ -22,7 +22,7 @@ using graph_t = std::vector<std::vector<grid_t>>;
 using devices_t = std::vector<device_t>;
 
 struct grid_t {
-    CudaManagedMemory<vertex_t> row, ptr, col;
+    CudaMemory<vertex_t> row, ptr, col;
 };
 
 struct managed_t {
@@ -40,14 +40,10 @@ struct device_t {
         CudaMemory<count_t> count;
     };
 
-    struct GlobalMemory {
-    };
-
     int deviceID;
 
     std::vector<cudaStream_t> stream;
     std::vector<StreamMemory> streamMemory;
-    GlobalMemory globalMemory;
 
     void init(int const _deviceID, int const _streams, int const _gridWidth);
     ~device_t();

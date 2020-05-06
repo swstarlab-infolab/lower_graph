@@ -4,6 +4,11 @@
 #include "../meta.h"
 
 #include <cub/device/device_scan.cuh>
+#include <device_launch_parameters.h>
+#include <algorithm>
+
+using memory_list_t = std::vector<grid_pos_t>>;
+using memory_lists_t = std::vector<memory_list_t>;
 
 decltype(meta_t::info.width.row) getGridWidth(fs::path const & folderPath) {
     meta_t meta;
@@ -11,7 +16,22 @@ decltype(meta_t::info.width.row) getGridWidth(fs::path const & folderPath) {
     return meta.info.width.row;
 }
 
-void launch(managed_t & managed, devices_t & devices, int const blockCount, int const threadCount) {
+static void bringNewMemory(managed_t & managed, memory_list_t & devMemList, grid_pos_t & target) {
+    if (std::find(devMemList.begin(), devMemList.end(), target) != devMemList.end()) {
+        // find
+        return;
+    } else {
+        copyToGPU();
+    }
+}
+
+void launch(
+    Graph & managed,
+    DeviceMemory & devices,
+    int const blockCount,
+    int const threadCount
+)
+{
     std::vector<count_t> globalCount(devices.size() * devices.front().stream.size());
 
     size_t streamIndex = 0;
@@ -28,17 +48,6 @@ void launch(managed_t & managed, devices_t & devices, int const blockCount, int 
         }
     };
 
-    // THIS FUNCTION IS KEY POINT FOR HIGH SPEED !!!
-    auto setGrid = [](int const did, grid_t const & g, cudaStream_t & s){
-        auto _tmpfunc = [](int const did, CudaManagedMemory<vertex_t> const & arr, cudaStream_t & s){
-            // Especially these two lines!!!
-            arr.advise(did, cudaMemoryAdvise::cudaMemAdviseSetReadMostly);
-            arr.prefetchAsync(did, s);
-        };
-        _tmpfunc(did, g.row, s);
-        _tmpfunc(did, g.ptr, s);
-        _tmpfunc(did, g.col, s);
-    };
 
     auto start = std::chrono::system_clock::now();
 
@@ -46,24 +55,22 @@ void launch(managed_t & managed, devices_t & devices, int const blockCount, int 
         for (size_t col = 0; col <= row; col++) {
             for (size_t i = col; i <= row; i++) {
                 auto & device = devices[deviceIndex];
-                auto const & G0 = managed.graph[i][col];
-                auto const & G1 = managed.graph[row][col];
-                auto const & G2 = managed.graph[row][i];
+                cudaSetDevice(device.deviceID); CUDACHECK();
 
                 auto & mem = device.streamMemory[streamIndex];
                 auto & stream = device.stream[streamIndex];
 
-                cudaSetDevice(device.deviceID); CUDACHECK();
+                //auto const & G0 = managed.graph[i][col];
+                //auto const & G1 = managed.graph[row][col];
+                //auto const & G2 = managed.graph[row][i];
 
                 if (!(G0.row.count() && G1.row.count() && G2.row.count())) { continue; }
 
-                // launch kernels
+                fprintf(stdout, "GPU%d, (%ld, %ld) (%ld, %ld), (%ld, %ld)\n", device.deviceID, i, col, row, col, row, i);
 
-                setGrid(device.deviceID, G0, stream);
-                setGrid(device.deviceID, G1, stream);
-                setGrid(device.deviceID, G2, stream);
 
                 genLookupTemp <<<blockCount, threadCount, 0, stream>>> (G0, mem.lookup.temp);
+                CUDACHECK();
 
                 size_t byte = mem.cub.byte();
                 cub::DeviceScan::ExclusiveSum(
@@ -71,12 +78,15 @@ void launch(managed_t & managed, devices_t & devices, int const blockCount, int 
                     byte,
                     mem.lookup.temp.data(),
                     mem.lookup.G0.data(),
-                    mem.lookup.G0.count(),
-                    stream);
+                    mem.lookup.G0.count());
+                    //stream);
+                CUDACHECK();
 
                 resetLookupTemp <<<blockCount, threadCount, 0, stream>>> (G0, mem.lookup.temp);
+                CUDACHECK();
 
                 genLookupTemp <<<blockCount, threadCount, 0, stream>>> (G2, mem.lookup.temp);
+                CUDACHECK();
 
                 cub::DeviceScan::ExclusiveSum(
                     (void*)mem.cub.data(),
@@ -85,23 +95,24 @@ void launch(managed_t & managed, devices_t & devices, int const blockCount, int 
                     mem.lookup.G2.data(),
                     mem.lookup.G2.count(),
                     stream);
+                CUDACHECK();
 
                 resetLookupTemp <<<blockCount, threadCount, 0, stream>>> (G2, mem.lookup.temp);
+                CUDACHECK();
 
-                G1.row.prefetchAsync(deviceIndex, stream);
-                G1.ptr.prefetchAsync(deviceIndex, stream);
-                G1.col.prefetchAsync(deviceIndex, stream);
                 kernel <<<blockCount, threadCount, 0, stream>>> (
                     G0, G1, G2,
                     mem.lookup.G0,
                     mem.lookup.G2,
                     mem.count);
+                CUDACHECK();
 
                 next();
             }
         }
     }
 
+    CUDACHECK();
 
     for (auto & device : devices) {
         cudaSetDevice(device.deviceID); CUDACHECK();
@@ -111,6 +122,8 @@ void launch(managed_t & managed, devices_t & devices, int const blockCount, int 
                 device.stream[s]); CUDACHECK();
         }
     }
+
+    fprintf(stdout, "WAIT KERNEL COMPLETION\n");
 
     for (auto & device : devices) {
         cudaSetDevice(device.deviceID); CUDACHECK();
@@ -125,7 +138,10 @@ void launch(managed_t & managed, devices_t & devices, int const blockCount, int 
 
     std::chrono::duration<double> elapsed = std::chrono::system_clock::now() - start;
     std::cout << globalCount.front() << "," << elapsed.count() << std::endl;
+
+    CUDACHECK();
 }
+
 
 int main(int argc, char * argv[]) {
     if (argc != 5) {
@@ -141,22 +157,19 @@ int main(int argc, char * argv[]) {
     int deviceCount = -1;
     cudaGetDeviceCount(&deviceCount); CUDACHECK();
 
-    auto p = [](int src, int dst){
-        cudaSetDevice(src); CUDACHECK();
-        int canAccessPeer = 0;
-        cudaDeviceCanAccessPeer(&canAccessPeer, src, dst); CUDACHECK();
-        if (canAccessPeer) {
-            cudaDeviceEnablePeerAccess(dst, 0); CUDACHECK();
-            //printf("Peer Access Enabled: GPU%d -> GPU%d\n", src, dst);
-        }
-    };
-
-    for (auto i = 0; i < deviceCount; i++) {
-        for (auto j = 0; j < i; j++) {
-            p(i, j);
-            p(j, i);
+    for (int i = 0; i < deviceCount; i++) {
+        for (int j = 0; j < deviceCount; j++) {
+            if (i == j) { continue; }
+            int canAccess;
+            cudaDeviceCanAccessPeer(&canAccess, i, j);
+            if (canAccess) {
+                cudaSetDevice(i);
+                cudaDeviceEnablePeerAccess(j, 0);
+            }
         }
     }
+
+    memory_list_t devMemList(deviceCount);
 
     devices_t devices(deviceCount);
     auto gridWidth = getGridWidth(folderPath);
@@ -167,7 +180,7 @@ int main(int argc, char * argv[]) {
     managed_t managed;
     managed.init(folderPath);
 
-    launch(managed, devices, blockCount, threadCount);
+    launch(managed, devices, devMemlist, blockCount, threadCount);
 
     return 0;
 }

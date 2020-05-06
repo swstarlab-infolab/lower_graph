@@ -8,7 +8,7 @@ void device_t::init(int const _deviceID, int const _streams, int const _gridWidt
     this->streamMemory.resize(_streams);
 
     cudaSetDevice(this->deviceID); CUDACHECK();
-    cudaDeviceReset(); CUDACHECK();
+
     for (auto & s : this->stream) {
         cudaStreamCreate(&s); CUDACHECK();
     }
@@ -33,7 +33,7 @@ void device_t::init(int const _deviceID, int const _streams, int const _gridWidt
             s.lookup.G0.data(),
             s.lookup.G0.count()); CUDACHECK();
 
-        s.cub.mallocByte(byte);
+        s.cub.mallocByte(byte); CUDACHECK();
     }
 }
 

@@ -8,6 +8,10 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
+#include <queue>
+#include <future>
+#include <chrono>
+
 #include "../cudaMemory.cuh"
 #include "../common.h"
 #include "../meta.h"
@@ -33,46 +37,54 @@ struct Grid {
 
 // Only in GPU
 struct Device {
-    struct StreamMemory {
-        CudaMemory<Count> edge, selfloop;
+protected:
+    struct _stream {
+        cudaStream_t stream;
+        cudaEvent_t event;
+        struct {
+            CudaMemory<Count> edge, selfloop;
+        } memory;
     };
 
-    struct GlobalMemory {
+    struct _global {
     };
 
+public:
     int deviceID;
 
-    std::vector<cudaStream_t> stream;
-    std::vector<StreamMemory> streamMemory;
-    GlobalMemory globalMemory;
+    std::vector<_stream> stream;
+    _global global;
+
+    std::vector<Grid> worklist;
 
     void init(int const _deviceID, int const _streams) {
         this->deviceID = _deviceID;
         this->stream.resize(_streams);
-        this->streamMemory.resize(_streams);
 
         cudaSetDevice(this->deviceID); CUDACHECK();
         cudaDeviceReset(); CUDACHECK();
-        for (auto & s : this->stream) {
-            cudaStreamCreate(&s); CUDACHECK();
-        }
 
-        for (auto & smem : this->streamMemory) {
-            //smem.edge.malloc(1); CUDACHECK();
-            smem.edge.zerofill(); CUDACHECK();
-            //smem.selfloop.malloc(1); CUDACHECK();
-            smem.selfloop.zerofill(); CUDACHECK();
+        for (auto & s : this->stream) {
+            cudaStreamCreate(&s.stream); CUDACHECK();
+            cudaEventCreate(&s.event); CUDACHECK();
+            s.memory.edge.malloc(1); CUDACHECK();
+            s.memory.edge.zerofill(); CUDACHECK();
+            s.memory.selfloop.malloc(1); CUDACHECK();
+            s.memory.selfloop.zerofill(); CUDACHECK();
         }
     }
 
     ~Device() {
-        cudaSetDevice(this->deviceID); CUDACHECK();
+        cudaSetDevice(this->deviceID);
+        /*
         for (auto & s : this->stream) {
-            cudaStreamDestroy(s);
+            cudaEventDestroy(s.event); CUDACHECK();
+            cudaStreamDestroy(s.stream); CUDACHECK();
         }
+        */
+        cudaDeviceReset();
     }
 };
-
 
 struct Managed {
     Graph graph;
@@ -120,17 +132,23 @@ struct Managed {
     }
 };
 
+struct Result {
+    Count edge, selfloop;
+};
+
 __global__
 void countEdge(Grid const g, Count * count) {
-    Count mycount = 0;
+    Count mycount = 32;
 
+    uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
     //uint32_t ts = gridDim.x * blockDim.x;
-    //uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+
     for (size_t i = blockIdx.x; i < g.ptr.count() - 1; i += gridDim.x) {
         for (auto j = g.ptr[i] + threadIdx.x; j < g.ptr[i+1]; j += blockDim.x) {
             mycount++;
         }
     }
+
 
     for (uint8_t offset = 16; offset > 0; offset >>= 1) {
 		mycount += __shfl_down_sync(0xFFFFFFFF, mycount, offset);
@@ -143,8 +161,6 @@ __global__
 void countSelfloop(Grid const g, Count * count) {
     Count mycount = 0;
 
-    //uint32_t ts = gridDim.x * blockDim.x;
-    //uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
     for (size_t i = blockIdx.x; i < g.ptr.count() - 1; i += gridDim.x) {
         for (auto j = g.ptr[i] + threadIdx.x; j < g.ptr[i+1]; j += blockDim.x) {
             if (g.row[i] == g.col[j]) {
@@ -160,16 +176,89 @@ void countSelfloop(Grid const g, Count * count) {
 	if ((threadIdx.x & 31) == 0) { atomicAdd(count, mycount); }
 }
 
+Result eachGPURoutine(Managed const & man, Device & dev, int const blocks, int const threads) {
+    if (dev.worklist.size() == 0) {
+        return Result{0,};
+    }
+
+
+    auto & nowWork = dev.worklist.front();
+
+    printf("%d %d %d\n", nowWork.row.byte(), nowWork.ptr.byte(), nowWork.col.byte());
+
+    cudaSetDevice(dev.deviceID);
+    countEdge<<<blocks, threads>>>(nowWork, dev.stream[0].memory.edge.data());
+    countSelfloop<<<blocks, threads>>>(nowWork, dev.stream[0].memory.selfloop.data());
+
+/*
+
+    printf("Start Prefetch\n");
+    nowWork.row.prefetch(dev.deviceID, dev.stream[0].stream);
+    nowWork.ptr.prefetch(dev.deviceID, dev.stream[0].stream);
+    nowWork.col.prefetch(dev.deviceID, dev.stream[0].stream);
+
+    printf("Prefetch event record\n");
+    cudaEventRecord(dev.stream[0].event, dev.stream[1].stream);
+
+    for (size_t i = 0; i < dev.worklist.size(); i++) {
+        auto & nowWork = dev.worklist[i];
+
+        cudaEventSynchronize(dev.stream[0].event);
+        cudaEventSynchronize(dev.stream[1].event);
+        printf("event sync record\n");
+
+        countEdge<<<blocks, threads, 0, dev.stream[0].stream>>>(nowWork, dev.stream[0].memory.edge.data());
+        countSelfloop<<<blocks, threads, 0, dev.stream[0].stream>>>(nowWork, dev.stream[0].memory.selfloop.data());
+
+        cudaDeviceSynchronize();
+
+        cudaEventRecord(dev.stream[0].event, dev.stream[0].stream);
+        printf("kernel event record\n");
+
+        if (i < dev.worklist.size() - 1) {
+            cudaStreamSynchronize(dev.stream[1].stream);
+            auto & nextWork = dev.worklist[i+1];
+
+            nextWork.row.prefetch(dev.deviceID, dev.stream[1].stream);
+            nextWork.ptr.prefetch(dev.deviceID, dev.stream[1].stream);
+            nextWork.col.prefetch(dev.deviceID, dev.stream[1].stream);
+            cudaEventRecord(dev.stream[1].event, dev.stream[1].stream);
+            printf("prefetch event record if\n");
+        }
+
+        std::swap(dev.stream[0].stream, dev.stream[1].stream);
+        std::swap(dev.stream[0].event, dev.stream[1].event);
+        printf("swap\n");
+    }
+    */
+
+    cudaDeviceSynchronize();
+    printf("sync all\n");
+
+    std::vector<Result> result(dev.stream.size());
+
+    for (int i = 0; i < result.size(); i++) {
+        dev.stream[i].memory.edge.copyD2H(&result[i].edge);
+        dev.stream[i].memory.selfloop.copyD2H(&result[i].selfloop);
+    }
+
+    for (int i = 1; i < result.size(); i++) {
+        result.front().edge += result[i].edge;
+        result.front().selfloop += result[i].selfloop;
+    }
+
+    return result.front();
+};
+
 int main(int argc, char * argv[]) {
-    if (argc != 5) {
-        std::cerr << "usage" << std::endl << argv[0] << " <folder_path> <streams> <blocks> <threads>" << std::endl;
+    if (argc != 4) {
+        std::cerr << "usage" << std::endl << argv[0] << " <folder_path> <blocks> <threads>" << std::endl;
         return 0;
     }
 
     auto const pathFolder = fs::path(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
-    auto const streamCount = strtol(argv[2], nullptr, 10);
-    auto const blockCount = strtol(argv[3], nullptr, 10);
-    auto const threadCount = strtol(argv[4], nullptr, 10);
+    auto const blockCount = strtol(argv[2], nullptr, 10);
+    auto const threadCount = strtol(argv[3], nullptr, 10);
 
     int deviceCount = -1;
     cudaGetDeviceCount(&deviceCount); CUDACHECK();
@@ -185,6 +274,7 @@ int main(int argc, char * argv[]) {
         }
     };
 
+
     for (auto i = 0; i < deviceCount; i++) {
         for (auto j = 0; j < i; j++) {
             p(i, j);
@@ -195,61 +285,44 @@ int main(int argc, char * argv[]) {
     Devices devices(deviceCount);
 
     for (auto i = 0; i < devices.size(); i++){
-        devices[i].init(i, 1);
-        //printf("Set GPU%d Memory\n", i);
+        devices[i].init(i, 2);
     }
 
     Managed managed;
     managed.init(pathFolder);
-    //printf("Set Unified Memory\n");
 
     cudaDeviceSynchronize();
 
     int gpu = 0;
     for (auto & row : managed.graph) {
         for (auto & grid : row) {
-            auto & cEdge = devices[gpu].streamMemory[0].edge;
-            auto & cSelfloop = devices[gpu].streamMemory[0].selfloop;
-            auto & stream = devices[gpu].stream[0];
-
-            cudaSetDevice(gpu); CUDACHECK();
-            grid.row.prefetch(gpu, devices[gpu].stream[0]); CUDACHECK();
-            grid.ptr.prefetch(gpu, devices[gpu].stream[0]); CUDACHECK();
-            grid.col.prefetch(gpu, devices[gpu].stream[0]); CUDACHECK();
-            countEdge<<<blockCount, threadCount, 0, stream>>>(grid, cEdge.data());
-            countSelfloop<<<blockCount, threadCount, 0, stream>>>(grid, cSelfloop.data());
-
-            gpu = (gpu == (devices.size()-1)) ? 0 : gpu + 1;
+            if (grid.row.count() != 0) {
+                devices[gpu].worklist.push_back(std::move(grid));
+            }
         }
+        gpu = (gpu == (devices.size()-1)) ? 0 : gpu + 1;
     }
 
+    std::vector<std::future<Result>> futures(devices.size());
+
+    auto start = std::chrono::system_clock::now();
+
+    for (int i = 0; i < futures.size(); i++) {
+        futures[i] = std::async(std::launch::async, eachGPURoutine, std::ref(managed), std::ref(devices[i]), blockCount, threadCount);
+    }
+
+    Result hResult = {0,};
     for (int i = 0; i < devices.size(); i++) {
-        cudaSetDevice(i); CUDACHECK();
-        cudaDeviceSynchronize(); CUDACHECK();
+        auto dResult = futures[i].get();
+        hResult.edge += dResult.edge;
+        hResult.selfloop += dResult.selfloop;
     }
 
-    std::vector<Count> hEdges(devices.size());
-    std::vector<Count> hSelfloops(devices.size());
-    for (int i = 0; i < devices.size(); i++) {
-        cudaSetDevice(i); CUDACHECK();
-        for (int j = 0; j < devices[i].stream.size(); j++) {
-            devices[i].streamMemory[j].edge.copyTo(&hEdges[i], devices[i].stream[j]); CUDACHECK();
-            devices[i].streamMemory[j].selfloop.copyTo(&hSelfloops[i], devices[i].stream[j]); CUDACHECK();
-        }
-    }
+    std::chrono::duration<double> elapsed = std::chrono::system_clock::now() - start;
 
-    for (int i = 0; i < devices.size(); i++) {
-        cudaSetDevice(i); CUDACHECK();
-        cudaDeviceSynchronize(); CUDACHECK();
-    }
-
-    for (int i = 1; i < devices.size(); i++) {
-        hEdges[0] += hEdges[i];
-        hSelfloops[0] += hSelfloops[i];
-    }
-
-    printf("edges:%lld\n", hEdges.front());
-    printf("loops:%lld\n", hSelfloops.front());
+    printf("edges:%lld\n", hResult.edge);
+    printf("loops:%lld\n", hResult.selfloop);
+    printf("elapsed:%lf\n", elapsed.count());
 
     return 0;
 }

@@ -24,22 +24,33 @@ list(APPEND CUDA_NVCC_FLAGS
     -O3 -std=c++14)
 
 foreach(_ITEM meta)
-file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
-add_library(${_ITEM} ${_FILES})
+	file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
+	add_library(${_ITEM} ${_FILES})
 endforeach(_ITEM)
 
 foreach(_ITEM converter)
-file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
-add_executable(${_ITEM} ${_FILES})
-add_dependencies(${_ITEM} meta)
-target_link_libraries(${_ITEM} pthread tbb stdc++fs meta)
+	file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
+	add_executable(${_ITEM} ${_FILES})
+	add_dependencies(${_ITEM} meta)
+	target_link_libraries(${_ITEM} pthread tbb stdc++fs meta)
 endforeach(_ITEM)
 
-foreach(_ITEM inspect triangle-lt triangle-lt-bst triangle-deg-bst triangle-lt-bst-unified triangle-lt-bst-unified2)
-file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
-cuda_add_executable(${_ITEM} ${_FILES})
-add_dependencies(${_ITEM} meta)
-target_link_libraries(${_ITEM} pthread tbb stdc++fs meta)
+foreach(_ITEM
+		#inspect
+		#inspect2
+		p2ptest
+		#memory-manager-test
+		#triangle-lt
+		#triangle-lt-bst
+		#triangle-deg-bst
+		#triangle-lt-bst-unified
+		triangle-lt-bst-manual
+		triangle-lt-bst-nvlink
+		)
+	file(GLOB_RECURSE _FILES ${CMAKE_SOURCE_DIR}/src/${_ITEM}/*)
+	cuda_add_executable(${_ITEM} ${_FILES})
+	add_dependencies(${_ITEM} meta)
+	target_link_libraries(${_ITEM} pthread tbb stdc++fs meta)
 endforeach(_ITEM)
 
 add_custom_target(
