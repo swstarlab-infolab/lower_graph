@@ -4,7 +4,7 @@
 #include <vector>
 #include <cuda_runtime.h>
 #include <cstdint>
-#include <MyProject/CUDA/memory.cuh>
+#include <GridCSR/CUDA/memory.cuh>
 #include <GridCSR/GridCSR.h>
 
 #define CUDACHECK() \

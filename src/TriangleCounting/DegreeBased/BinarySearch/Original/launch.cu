@@ -10,79 +10,7 @@
 
 #include <cmath>
 
-__device__ static uint32_t ulog2floor(uint32_t x) {
-    uint32_t r, q;
-    r = (x > 0xFFFF) << 4; x >>= r;
-    q = (x > 0xFF  ) << 3; x >>= q; r |= q;
-    q = (x > 0xF   ) << 2; x >>= q; r |= q;
-    q = (x > 0x3   ) << 1; x >>= q; r |= q;
-                                   
-    return (r | (x >> 1));
-}
-
-__device__ static void intersection(
-    GridCSR::Vertex const * Arr,
-    uint32_t const ArrLen,
-    GridCSR::Vertex const candidate,
-    count_t * count)
-{
-    //auto const maxLevel = uint32_t(ceil(log2(ArrLen + 1))) - 1;
-    // ceil(log2(a)) == floor(log2(a-1))+1
-    auto const maxLevel = ulog2floor(ArrLen);
-
-    int now = (ArrLen - 1) >> 1;
-
-    for (uint32_t level = 0; level <= maxLevel; level++) {
-        auto const movement = 1 << (maxLevel - level - 1);
-
-        if (now < 0) {
-            now += movement;
-        } else if (ArrLen <= now) {
-            now -= movement;
-        } else {
-            if (Arr[now] < candidate) {
-                now += movement;
-            } else if (candidate < Arr[now]) {
-                now -= movement;
-            } else {
-                (*count)++;
-                break;
-            }
-        }
-    }
-}
-
-__device__ static int binarySearchPosition(
-    GridCSR::Vertex const * Arr,
-    uint32_t const ArrLen,
-    GridCSR::Vertex const candidate)
-{
-    //auto const maxLevel = uint32_t(ceil(log2(ArrLen + 1))) - 1;
-    // ceil(log2(a)) == floor(log2(a-1))+1
-    auto const maxLevel = ulog2floor(ArrLen);
-
-    int now = (ArrLen - 1) >> 1;
-
-    for (uint32_t level = 0; level <= maxLevel; level++) {
-        auto const movement = 1 << (maxLevel - level - 1);
-
-        if (now < 0) {
-            now += movement;
-        } else if (ArrLen <= now) {
-            now -= movement;
-        } else {
-            if (Arr[now] < candidate) {
-                now += movement;
-            } else if (candidate < Arr[now]) {
-                now -= movement;
-            } else {
-                return now;
-            }
-        }
-    }
-
-    return -1;
-}
+#include <GridCSR/CUDA/Kernel.cuh>
 
 struct kernelParameter {
     struct {
@@ -103,7 +31,7 @@ __global__ static void kernel(kernelParameter kp)
     __shared__ int SHARED[1024];
 
     for (GridCSR::Vertex prowIter = blockIdx.x; prowIter < G.p.rows; prowIter+=gridDim.x) {
-        int const apos = binarySearchPosition(G.a.row, G.a.rows, G.p.row[prowIter]);
+        int const apos = GridCSR::CUDA::BinarySearchPosition(G.a.row, G.a.rows, G.p.row[prowIter]);
         if (apos == -1) { continue; }
         int const alen = G.a.ptr[apos+1] - G.a.ptr[apos];
 
@@ -113,7 +41,7 @@ __global__ static void kernel(kernelParameter kp)
         for (GridCSR::Vertex pcolIter = Gpptr_s; pcolIter < Gpptr_e; pcolIter+=blockDim.x) {
             SHARED[threadIdx.x]
                     = (pcolIter + threadIdx.x < Gpptr_e) ?
-                        binarySearchPosition(G.b.row, G.b.rows, G.p.col[pcolIter+threadIdx.x]) : -2;
+                        GridCSR::CUDA::BinarySearchPosition(G.b.row, G.b.rows, G.p.col[pcolIter+threadIdx.x]) : -2;
 
             __syncthreads();
 
@@ -126,11 +54,11 @@ __global__ static void kernel(kernelParameter kp)
 
                 if (alen > blen) {
                     for (GridCSR::Vertex bcolIter = G.b.ptr[bpos]+threadIdx.x; bcolIter < G.b.ptr[bpos+1]; bcolIter+=blockDim.x) {
-                        intersection(&G.a.col[G.a.ptr[apos]], alen, G.b.col[bcolIter], &mycount);
+                        GridCSR::CUDA::BinarySearchIntersection(&G.a.col[G.a.ptr[apos]], alen, G.b.col[bcolIter], &mycount);
                     }
                 } else {
                     for (GridCSR::Vertex acolIter = G.a.ptr[apos]+threadIdx.x; acolIter < G.a.ptr[apos+1]; acolIter+=blockDim.x) {
-                        intersection(&G.b.col[G.b.ptr[bpos]], blen, G.a.col[acolIter], &mycount);
+                        GridCSR::CUDA::BinarySearchIntersection(&G.b.col[G.b.ptr[bpos]], blen, G.a.col[acolIter], &mycount);
                     }
                 }
             }

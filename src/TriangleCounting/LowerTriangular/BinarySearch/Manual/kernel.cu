@@ -1,10 +1,12 @@
 #include "main.cuh"
-#include <MyProject/CUDA/kernel.cuh>
+#include <GridCSR/CUDA/Kernel.cuh>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
 #include <GridCSR/GridCSR.h>
+
+#include <GridCSR/CUDA/Kernel.cuh>
 
 __global__
 void genLookupTemp(grid_t const g, CudaMemory<lookup_t> lookup_temp) {
@@ -64,11 +66,11 @@ void kernel(
 
                 if (g1col_length >= g0col_length) {
                     for (uint32_t g0col_idx = g0col_idx_s + threadIdx.x; g0col_idx < g0col_idx_e; g0col_idx += blockDim.x) {
-                        intersection(&g1.col[g1col_idx_s], g1col_length, g0.col[g0col_idx], &mycount);
+                        GridCSR::CUDA::BinarySearchIntersection(&g1.col[g1col_idx_s], g1col_length, g0.col[g0col_idx], &mycount);
                     }
                 } else {
                     for (uint32_t g1col_idx = g1col_idx_s + threadIdx.x; g1col_idx < g1col_idx_e; g1col_idx += blockDim.x) {
-                        intersection(&g0.col[g0col_idx_s], g0col_length, g1.col[g1col_idx], &mycount);
+                        GridCSR::CUDA::BinarySearchIntersection(&g0.col[g0col_idx_s], g0col_length, g1.col[g1col_idx], &mycount);
                     }
                 }
             }
