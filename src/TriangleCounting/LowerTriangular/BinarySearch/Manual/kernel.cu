@@ -1,27 +1,34 @@
 #include "main.cuh"
-#include <GridCSR/CUDA/Kernel.cuh>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
 #include <GridCSR/GridCSR.h>
-
 #include <GridCSR/CUDA/Kernel.cuh>
 
 __global__
-void genLookupTemp(grid_t const g, CudaMemory<lookup_t> lookup_temp) {
+void genLookupTemp(Grid const g, GPUMemory<Lookup> lookupTemp) {
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < g.row.count(); i += gridDim.x * blockDim.x) {
-        lookup_temp[g.row[i]] = g.ptr[i+1] - g.ptr[i];
+        lookupTemp[g.row[i]] = g.ptr[i+1] - g.ptr[i];
     }
 }
 
 __global__
-void resetLookupTemp(grid_t const g, CudaMemory<lookup_t> lookup_temp) {
+void resetLookupTemp(Grid const g, GPUMemory<Lookup> lookupTemp) {
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < g.row.count(); i += gridDim.x * blockDim.x) {
-        lookup_temp[g.row[i]] = 0;
+        lookupTemp[g.row[i]] = 0;
     }
 }
 
+/*
+__global__ static void kernel(
+    lookup_t const * lookupG0, GridCSR::Vertex const * G0Col,
+    GridCSR::Vertex const * G1Row, GridCSR::Vertex const * G1Ptr, GridCSR::Vertex const * G1Col,
+    lookup_t const * lookupG2, GridCSR::Vertex const * G2Col,
+    count_t const G1RowSize,
+    count_t const gridWidth,
+    count_t * count)
+    */
 __global__
 void kernel(
         grid_t const g0, grid_t const g1, grid_t const g2,
