@@ -56,9 +56,9 @@ namespace Execute {
 void GPU(
     Context const & ctx,
     chanCmdReq & cmdReq,
-    chanCmdRes & cmdRes,
+    chanCmdRes * cmdRes,
     chanLoadReq & loadReq,
-    chanLoadRes & loadRes,
+    chanLoadRes * loadRes,
     int gpuID);
 } // namespace Execute
 } // namespace Manager

@@ -3,16 +3,14 @@
 #include <unistd.h>
 //#include <cuda_runtime.h>
 
-
-
 namespace Manager {
 namespace Execute {
 void GPU(
     Context const & ctx,
     chanCmdReq & cmdReq,
-    chanCmdRes & cmdRes,
+    chanCmdRes* cmdRes,
     chanLoadReq & loadReq,
-    chanLoadRes & loadRes,
+    chanLoadRes* loadRes,
     int gpuID)
 {
     //cudaSetDevice(gpuID);
@@ -21,7 +19,6 @@ void GPU(
     for (auto & req : cmdReq) {
         auto timeStart = std::chrono::system_clock::now();
         //cudaMalloc(&temp, 1024L * 1024L * 1024L * sizeof(*temp));
-        //sleep(1);
         //cudaFree(temp);
         auto timeEnd = std::chrono::system_clock::now();
 
@@ -34,13 +31,14 @@ void GPU(
         res.G[2].row = req.G[2].row; res.G[2].col = req.G[2].col;
 
         res.elapsed = timeSecond.count();
+        res.triangle = 0;
         res.deviceID = gpuID;
         res.success = true;
 
-        cmdRes.push(res);
+        cmdRes->push(res);
     }
 
-    cmdRes.close();
+    cmdRes->close();
 
     //cudaDeviceReset();
 }
