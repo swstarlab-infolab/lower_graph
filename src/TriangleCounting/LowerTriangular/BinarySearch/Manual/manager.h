@@ -1,8 +1,11 @@
-#pragma once
+#ifndef __MANAGER_H__
+#define __MANAGER_H__
 
 #include "context.h"
-#include "channel.h"
 #include "type.h"
+#include <vector>
+
+#include <boost/fiber/buffered_channel.hpp>
 
 namespace Manager {
 namespace MessageType {
@@ -18,6 +21,7 @@ struct CommandRes {
     } G[3];
     Count triangle;
     double elapsed;
+    int deviceID;
     bool success;
 };
 
@@ -32,30 +36,31 @@ struct LoadRes {
 };
 } // namespace MessageType
 
+typedef boost::fibers::buffered_channel<MessageType::CommandReq> chanCmdReq;
+typedef boost::fibers::buffered_channel<MessageType::CommandRes> chanCmdRes;
+typedef boost::fibers::buffered_channel<MessageType::LoadReq> chanLoadReq;
+typedef boost::fibers::buffered_channel<MessageType::LoadRes> chanLoadRes;
+
 void commander(
     Context const & ctx,
-    Channel<MessageType::CommandReq> & cmdReq,
-    Channel<MessageType::CommandRes> & cmdRes);
+    chanCmdReq & cmdReq,
+    std::vector<std::shared_ptr<chanCmdRes>> & cmdRes);
 
 
-template <size_t Size>
 void loader(
     Context const & ctx,
-    Channel<MessageType::LoadReq> & loadReq,
-    std::array<Channel<MessageType::LoadRes>, Size> loadRes);
+    chanLoadReq & loadReq,
+    std::vector<std::shared_ptr<chanLoadRes>> & loadRes);
 
 namespace Execute {
-void CPU(
-    Context const & ctx,
-    Channel<MessageType::CommandReq> & cmdReq,
-    Channel<MessageType::CommandRes> & cmdRes,
-    Channel<MessageType::LoadReq> & loadReq,
-    Channel<MessageType::LoadRes> & loadRes);
 void GPU(
     Context const & ctx,
-    Channel<MessageType::CommandReq> & cmdReq,
-    Channel<MessageType::CommandRes> & cmdRes,
-    Channel<MessageType::LoadReq> & loadReq,
-    Channel<MessageType::LoadRes> & loadRes);
+    chanCmdReq & cmdReq,
+    chanCmdRes & cmdRes,
+    chanLoadReq & loadReq,
+    chanLoadRes & loadRes,
+    int gpuID);
 } // namespace Execute
 } // namespace Manager
+
+#endif

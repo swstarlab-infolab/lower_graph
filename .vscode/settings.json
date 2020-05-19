@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "*.go": "go",
         "*.cu": "cpp",
         "*.cuh": "cpp",
         "condition_variable": "cpp",
@@ -64,7 +65,13 @@
         "set": "cpp",
         "__hash_table": "cpp",
         "__tree": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "__functional_03": "cpp",
+        "any": "cpp",
+        "unordered_set": "cpp",
+        "future": "cpp",
+        "cinttypes": "cpp",
+        "channel": "cpp"
     },
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools"
 }
