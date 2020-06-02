@@ -73,5 +73,7 @@
         "cinttypes": "cpp",
         "channel": "cpp"
     },
-    "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools"
+    "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
+    "C_Cpp.clang_format_fallbackStyle": "WebKit",
+    "editor.formatOnSave": true
 }

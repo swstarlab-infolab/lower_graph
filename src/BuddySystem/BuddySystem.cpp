@@ -1,8 +1,8 @@
 #include <BuddySystem/BuddySystem.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <limits>
@@ -54,7 +54,8 @@ struct buddy_table_size_info {
  *
  */
 
-inline unsigned log2u(unsigned v) {
+inline unsigned log2u(unsigned v)
+{
     // source: https://graphics.stanford.edu/~seander/bithacks.html
     static unsigned const b[] = { 0x2, 0xC, 0xF0, 0xFF00, 0xFFFF0000 };
     static unsigned const s[] = { 1, 2, 4, 8, 16 };
@@ -68,7 +69,8 @@ inline unsigned log2u(unsigned v) {
     return r;
 }
 
-inline uint64_t log2u(uint64_t v) {
+inline uint64_t log2u(uint64_t v)
+{
     static uint64_t const b[] = { 0x2, 0xC, 0xF0, 0xFF00, 0xFFFF0000, 0xFFFFFFFF00000000 };
     static uint64_t const s[] = { 1, 2, 4, 8, 16, 32 };
     uint64_t r = 0;
@@ -82,12 +84,14 @@ inline uint64_t log2u(uint64_t v) {
 }
 
 template <typename T>
-T* seek_pointer(T* p, int64_t offset) {
+T* seek_pointer(T* p, int64_t offset)
+{
     auto const p2 = reinterpret_cast<char*>(p);
     return reinterpret_cast<T*>(p2 + offset);
 }
 
-buddy_table_size_info get_buddy_table_size_info(cof_type const root, cof_type const min_cof) {
+buddy_table_size_info get_buddy_table_size_info(cof_type const root, cof_type const min_cof)
+{
     // Note that a size of root node is root * alignment
     auto const get_linear_bound = [](cof_type n, cof_type min_cof) -> cof_type {
         do {
@@ -103,7 +107,7 @@ buddy_table_size_info get_buddy_table_size_info(cof_type const root, cof_type co
         do {
             cof_type const q = odd / 2; // quotient
             // select a next odd number
-            q & 0x1u ? odd = q : odd = q + 1;
+            q& 0x1u ? odd = q : odd = q + 1;
             if (q < min_cof)
                 break;
             depth += 1;
@@ -116,8 +120,7 @@ buddy_table_size_info get_buddy_table_size_info(cof_type const root, cof_type co
     unsigned const linear_depth = static_cast<unsigned>(log2u(static_cast<uint64_t>(root / linear_bound))) + 1;
     if (linear_bound <= min_cof) {
         info.tbl_size = info.buddy_lv = linear_depth;
-    }
-    else {
+    } else {
         unsigned const binary_depth = get_binary_depth(linear_bound, min_cof);
         info.tbl_size = linear_depth + binary_depth * 2;
         info.buddy_lv = linear_depth + binary_depth;
@@ -125,12 +128,14 @@ buddy_table_size_info get_buddy_table_size_info(cof_type const root, cof_type co
     return info;
 }
 
-bool is_aligned_address(void* addr, uint64_t alignment) {
+bool is_aligned_address(void* addr, uint64_t alignment)
+{
     auto const addr2 = reinterpret_cast<uint64_t>(addr);
     return addr2 % alignment == 0;
 }
 
-buddy_table::buddy_table() {
+buddy_table::buddy_table()
+{
     _align = 0;
     _min_cof = 0;
     _tbl_size = 0;
@@ -138,16 +143,19 @@ buddy_table::buddy_table() {
     memset(&_attr, 0, sizeof _attr);
 }
 
-buddy_table::~buddy_table() noexcept {
+buddy_table::~buddy_table() noexcept
+{
     _free_attr(&_attr);
 }
 
-buddy_table::buddy_table(cof_type const root_cof, unsigned const align, cof_type const min_cof) :
-    buddy_table() {
+buddy_table::buddy_table(cof_type const root_cof, unsigned const align, cof_type const min_cof)
+    : buddy_table()
+{
     init(root_cof, align, min_cof);
 }
 
-void buddy_table::init(cof_type const root_cof, unsigned const align, cof_type const min_cof) {
+void buddy_table::init(cof_type const root_cof, unsigned const align, cof_type const min_cof)
+{
     assert(align % 2 == 0);
     assert(min_cof > 0);
     auto const info = get_buddy_table_size_info(root_cof, min_cof);
@@ -159,7 +167,8 @@ void buddy_table::init(cof_type const root_cof, unsigned const align, cof_type c
     //TODO: Add exception handling when initialization fails (11/05/2019)
 }
 
-void buddy_table::clear() noexcept {
+void buddy_table::clear() noexcept
+{
     _free_attr(&_attr);
     _align = 0;
     _min_cof = 0;
@@ -168,19 +177,29 @@ void buddy_table::clear() noexcept {
     memset(&_attr, 0, sizeof _attr);
 }
 
-void buddy_table::printout() const {
+void buddy_table::printout() const
+{
     for (level_t i = 0; i < _tbl_size; ++i) {
         printf("%4u | %4u | %" PRId64 "\n",
-            i, _attr.level_v[i], _attr.cof_v[i]
-        );
+            i, _attr.level_v[i], _attr.cof_v[i]);
     }
 }
 
-blkidx_t buddy_table::best_fit(uint64_t const block_size) const {
+blkidx_t buddy_table::best_fit(uint64_t const block_size) const
+{
     assert(block_size <= static_cast<uint64_t>(_attr.cof_v[0] * _align));
     assert(_tbl_size > 0);
     cof_type const cof = static_cast<cof_type>((block_size + _align - 1) / _align);
-    cof_type diff1 = std::numeric_limits<cof_type>::max();
+
+    for (unsigned i = _tbl_size - 1; i > 0; --i) {
+        if (_attr.cof_v[i] >= cof) {
+            assert(block_size <= static_cast<uint64_t>(_attr.cof_v[i] * _align));
+            return i;
+        }
+    }
+    return 0;
+
+    /*cof_type diff1 = std::numeric_limits<cof_type>::max();
     blkidx_t i = _tbl_size;
     do {
         cof_type const diff2 = std::abs(_attr.cof_v[i - 1] - cof);
@@ -189,10 +208,11 @@ blkidx_t buddy_table::best_fit(uint64_t const block_size) const {
         diff1 = diff2;
         i -= 1;
     } while (i > 0);
-    return i;
+    return i;*/
 }
 
-void buddy_table::_free_attr(tbl_attr* attr) {
+void buddy_table::_free_attr(tbl_attr* attr)
+{
     free(attr->level_v);
     free(attr->cof_v);
     free(attr->prof_v);
@@ -203,7 +223,8 @@ buddy_table::tbl_attr buddy_table::_init_attr(
     unsigned const tbl_size,
     cof_type const root,
     unsigned const align,
-    cof_type const min_cof) {
+    cof_type const min_cof)
+{
     assert(align % 2 == 0);
     assert(min_cof > 0);
     assert(root > 0);
@@ -263,8 +284,7 @@ buddy_table::tbl_attr buddy_table::_init_attr(
             if (a1b3_pattern) {
                 attr.prof_v[i].flags = RareBuddyBlock | A1B3Pattern;
                 attr.prof_v[i + 1].flags = FrequentBuddyBlock | A1B3Pattern;
-            }
-            else {
+            } else {
                 attr.prof_v[i].flags = FrequentBuddyBlock | A3B1Pattern;
                 attr.prof_v[i + 1].flags = RareBuddyBlock | A3B1Pattern;
             }
@@ -282,8 +302,7 @@ buddy_table::tbl_attr buddy_table::_init_attr(
         assert(linear_size + 1 < tbl_size);
         attr.prof_v[linear_size].dist = 1;
         attr.prof_v[linear_size + 1].dist = 2;
-        attr.prof_v[linear_size].flags =
-            attr.prof_v[linear_size + 1].flags = RareBuddyBlock | A3B1Pattern;
+        attr.prof_v[linear_size].flags = attr.prof_v[linear_size + 1].flags = RareBuddyBlock | A3B1Pattern;
     } while (false);
     goto lb_return;
 
@@ -295,84 +314,98 @@ lb_return:
 }
 
 segregated_storage::segregated_storage(
-    void* preallocated, size_t _bufsize, size_t _block_size) :
-    buffer(preallocated), bufsize(_bufsize), block_size(_block_size),
-    capacity(bufsize / block_size), _free_list(capacity) {
+    void* preallocated, size_t _bufsize, size_t _block_size)
+    : buffer(preallocated)
+    , bufsize(_bufsize)
+    , block_size(_block_size)
+    , capacity(bufsize / block_size)
+    , _free_list(capacity)
+{
     reset();
 }
 
-void* segregated_storage::allocate() {
+void* segregated_storage::allocate()
+{
     void* p;
     if (_free_list.pop(&p)) {
-        assert(static_cast<char*>(p) >= static_cast<char*>(buffer) &&
-            static_cast<char*>(p) < static_cast<char*>(buffer) + bufsize);
+        assert(static_cast<char*>(p) >= static_cast<char*>(buffer) && static_cast<char*>(p) < static_cast<char*>(buffer) + bufsize);
         return p;
     }
     return nullptr;
 }
 
-void segregated_storage::deallocate(void* p) {
-    assert(static_cast<char*>(p) >= static_cast<char*>(buffer) &&
-        static_cast<char*>(p) < static_cast<char*>(buffer) + bufsize);
+void segregated_storage::deallocate(void* p)
+{
+    assert(static_cast<char*>(p) >= static_cast<char*>(buffer) && static_cast<char*>(p) < static_cast<char*>(buffer) + bufsize);
     _free_list.push(p);
 }
 
-void segregated_storage::reset() {
+void segregated_storage::reset()
+{
     void** p = _free_list._get_buffer();
     for (size_t i = 0; i < capacity; ++i)
         p[i] = seek_pointer(buffer, block_size * i);
     _free_list._config(capacity);
 }
 
-double segregated_storage::fill_rate() const {
+double segregated_storage::fill_rate() const
+{
     return static_cast<double>(_free_list.size()) / static_cast<double>(_free_list.capacity());
 }
 
 template <typename RequestType, typename OffsetType>
-inline RequestType get_bit(OffsetType off) {
+inline RequestType get_bit(OffsetType off)
+{
     RequestType c = 1;
     return c << off;
 }
 
 template <typename RequestType, typename OffsetType>
-inline void set_bit(RequestType* bitmap, OffsetType off) {
+inline void set_bit(RequestType* bitmap, OffsetType off)
+{
     bitmap[off / (sizeof(RequestType) * 8)] |= get_bit<RequestType>(off % (sizeof(RequestType) * 8));
 }
 
 template <typename RequestType, typename OffsetType>
-inline void clear_bit(RequestType* bitmap, OffsetType off) {
+inline void clear_bit(RequestType* bitmap, OffsetType off)
+{
     bitmap[off / (sizeof(RequestType) * 8)] &= ~get_bit<RequestType>(off % (sizeof(RequestType) * 8));
 }
 
 template <typename RequestType, typename OffsetType>
-inline bool test_bit(RequestType* bitmap, OffsetType off) {
-    return  bitmap[off / (sizeof(RequestType) * 8)] & get_bit<RequestType>(off % (sizeof(RequestType) * 8));
+inline bool test_bit(RequestType* bitmap, OffsetType off)
+{
+    return bitmap[off / (sizeof(RequestType) * 8)] & get_bit<RequestType>(off % (sizeof(RequestType) * 8));
 }
 
 static char const __num_to_bits[16] = { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4 };
 
-inline uint8_t count_set_bits(uint8_t const n) {
+inline uint8_t count_set_bits(uint8_t const n)
+{
     if (n == 0)
         return 0;
     uint8_t const nibble = n & 0xf;
     return __num_to_bits[nibble] + __num_to_bits[n >> 4];
 }
 
-inline uint16_t count_set_bits(uint16_t const n) {
+inline uint16_t count_set_bits(uint16_t const n)
+{
     if (n == 0)
         return 0;
     uint16_t const c = count_set_bits(static_cast<uint8_t>(n));
     return c + count_set_bits(static_cast<uint8_t>(n >> 8));
 }
 
-inline uint32_t count_set_bits(uint32_t const n) {
+inline uint32_t count_set_bits(uint32_t const n)
+{
     if (n == 0)
         return 0;
     uint32_t const c = count_set_bits(static_cast<uint16_t>(n));
     return c + count_set_bits(static_cast<uint16_t>(n >> 16));
 }
 
-inline uint64_t count_set_bits(uint64_t const n) {
+inline uint64_t count_set_bits(uint64_t const n)
+{
     if (n == 0)
         return 0;
     uint64_t const c = count_set_bits(static_cast<uint32_t>(n));
@@ -386,40 +419,49 @@ public:
     constexpr static size_t byte_length = length / 8;
     static_assert(length % 8 == 0, "a template argument \'Length\' must be multiple of 8");
 
-    bitset() {
+    bitset()
+    {
         memset(data, 0, byte_length);
     }
 
-    bitset(bitset const& other) {
+    bitset(bitset const& other)
+    {
         memmove(data, other.data, byte_length);
     }
 
-    ~bitset() noexcept {
+    ~bitset() noexcept
+    {
         /* nothing to do. */
     }
 
-    inline bool test(size_t const index) const {
+    inline bool test(size_t const index) const
+    {
         const char byte = data[index / 8];
         return byte & get_bit<char>(index % 8);
     }
 
-    inline void set(size_t const index) {
+    inline void set(size_t const index)
+    {
         data[index / 8] |= get_bit<char>(index % 8);
     }
 
-    inline void clear(size_t const index) {
+    inline void clear(size_t const index)
+    {
         data[index / 8] &= ~get_bit<char>(index % 8);
     }
 
-    inline void set_all() {
+    inline void set_all()
+    {
         memset(data, ~0, byte_length);
     }
 
-    inline void clear_all() {
+    inline void clear_all()
+    {
         memset(data, 0, byte_length);
     }
 
-    inline size_t count() const {
+    inline size_t count() const
+    {
         size_t l = byte_length / 8;
         size_t c = 0;
         uint8_t const* p = reinterpret_cast<uint8_t const*>(data);
@@ -435,11 +477,13 @@ public:
         return c;
     }
 
-    inline bool operator==(bitset const& other) {
+    inline bool operator==(bitset const& other)
+    {
         return memcmp(data, other.data, byte_length) == 0;
     }
 
-    bitset& operator|=(bitset const& other) {
+    bitset& operator|=(bitset const& other)
+    {
         size_t l = byte_length / 8;
         char* p1 = data;
         char const* p2 = other.data;
@@ -457,7 +501,8 @@ public:
         return *this;
     }
 
-    bitset& operator&=(bitset const& other) {
+    bitset& operator&=(bitset const& other)
+    {
         size_t l = byte_length / 8;
         char* p1 = data;
         char const* p2 = other.data;
@@ -475,7 +520,8 @@ public:
         return *this;
     }
 
-    bitset& operator^=(bitset const& other) {
+    bitset& operator^=(bitset const& other)
+    {
         size_t l = byte_length / 8;
         char* p1 = data;
         char const* p2 = other.data;
@@ -493,18 +539,21 @@ public:
         return *this;
     }
 
-    bitset operator|(bitset const& rhs) const {
-        bitset r{ *this };
+    bitset operator|(bitset const& rhs) const
+    {
+        bitset r { *this };
         return r |= rhs;
     }
 
-    bitset operator&(bitset const& rhs) const {
-        bitset r{ *this };
+    bitset operator&(bitset const& rhs) const
+    {
+        bitset r { *this };
         return r &= rhs;
     }
 
-    bitset operator^(bitset const& rhs) const {
-        bitset r{ *this };
+    bitset operator^(bitset const& rhs) const
+    {
+        bitset r { *this };
         return r ^= rhs;
     }
 
@@ -512,42 +561,49 @@ public:
 };
 
 //! Byte swap unsigned short
-inline uint16_t swap_uint16(uint16_t val) {
+inline uint16_t swap_uint16(uint16_t val)
+{
     return (val << 8) | (val >> 8);
 }
 
 //! Byte swap short
-inline int16_t swap_int16(int16_t val) {
+inline int16_t swap_int16(int16_t val)
+{
     return (val << 8) | ((val >> 8) & 0xFF);
 }
 
 //! Byte swap unsigned int
-inline uint32_t swap_uint32(uint32_t val) {
+inline uint32_t swap_uint32(uint32_t val)
+{
     val = ((val << 8) & 0xFF00FF00) | ((val >> 8) & 0xFF00FF);
     return (val << 16) | (val >> 16);
 }
 
 //! Byte swap int
-inline int32_t swap_int32(int32_t val) {
+inline int32_t swap_int32(int32_t val)
+{
     val = ((val << 8) & 0xFF00FF00) | ((val >> 8) & 0xFF00FF);
     return (val << 16) | ((val >> 16) & 0xFFFF);
 }
 
 //! Byte swap 64-bit int
-inline int64_t swap_int64(int64_t val) {
+inline int64_t swap_int64(int64_t val)
+{
     val = ((val << 8) & 0xFF00FF00FF00FF00ULL) | ((val >> 8) & 0x00FF00FF00FF00FFULL);
     val = ((val << 16) & 0xFFFF0000FFFF0000ULL) | ((val >> 16) & 0x0000FFFF0000FFFFULL);
     return (val << 32) | ((val >> 32) & 0xFFFFFFFFULL);
 }
 
 //! Byte swap 64-bit unsigned int
-inline uint64_t swap_uint64(uint64_t val) {
+inline uint64_t swap_uint64(uint64_t val)
+{
     val = ((val << 8) & 0xFF00FF00FF00FF00ULL) | ((val >> 8) & 0x00FF00FF00FF00FFULL);
     val = ((val << 16) & 0xFFFF0000FFFF0000ULL) | ((val >> 16) & 0x0000FFFF0000FFFFULL);
     return (val << 32) | (val >> 32);
 }
 
-bit_stack::bit_stack(size_t capacity_) {
+bit_stack::bit_stack(size_t capacity_)
+{
 #ifdef _MSC_VER
     _cap = roundup(capacity_, 4llu);
 #else
@@ -559,7 +615,8 @@ bit_stack::bit_stack(size_t capacity_) {
         memset(_container, 0, _cap / sizeof(int));
 }
 
-bit_stack::bit_stack(bit_stack const& other) {
+bit_stack::bit_stack(bit_stack const& other)
+{
     _cap = other._cap;
     _top = other._top;
     _container = static_cast<int*>(malloc(_cap / sizeof(int)));
@@ -567,19 +624,21 @@ bit_stack::bit_stack(bit_stack const& other) {
         memcpy(_container, other._container, _cap / sizeof(int));
 }
 
-bit_stack::bit_stack(bit_stack&& other) noexcept {
+bit_stack::bit_stack(bit_stack&& other) noexcept
+{
     _cap = other._cap;
     _top = other._top;
     _container = other._container;
     other._container = nullptr;
 }
 
-
-bit_stack::~bit_stack() noexcept {
+bit_stack::~bit_stack() noexcept
+{
     free(_container);
 }
 
-bit_stack& bit_stack::operator=(bit_stack const& rhs) {
+bit_stack& bit_stack::operator=(bit_stack const& rhs)
+{
     _cap = rhs._cap;
     _top = rhs._top;
     _container = static_cast<int*>(malloc(_cap / sizeof(int)));
@@ -588,7 +647,8 @@ bit_stack& bit_stack::operator=(bit_stack const& rhs) {
     return *this;
 }
 
-bit_stack& bit_stack::operator=(bit_stack&& rhs) noexcept {
+bit_stack& bit_stack::operator=(bit_stack&& rhs) noexcept
+{
     _cap = rhs._cap;
     _top = rhs._top;
     _container = rhs._container;
@@ -596,7 +656,8 @@ bit_stack& bit_stack::operator=(bit_stack&& rhs) noexcept {
     return *this;
 }
 
-bool bit_stack::push(bool const value) {
+bool bit_stack::push(bool const value)
+{
     if (_top == _cap) {
         if (!reserve(_cap * 2))
             return false;
@@ -610,25 +671,29 @@ bool bit_stack::push(bool const value) {
     return true;
 }
 
-bool bit_stack::pop() {
+bool bit_stack::pop()
+{
     if (empty())
         return false;
     _top -= 1;
     return true;
 }
 
-bool bit_stack::peek() const {
+bool bit_stack::peek() const
+{
     assert(_top > 0);
     return test_bit(_container, _top - 1);
 }
 
-void bit_stack::clear() {
+void bit_stack::clear()
+{
     _top = 0;
     if (_container != nullptr)
         memset(_container, 0, _cap / sizeof(int));
 }
 
-bool bit_stack::reserve(size_t const new_capacity) {
+bool bit_stack::reserve(size_t const new_capacity)
+{
     if (_cap >= new_capacity)
         return true;
     assert(_cap % 4 == 0);
@@ -642,7 +707,8 @@ bool bit_stack::reserve(size_t const new_capacity) {
     return true;
 }
 
-buddy_system::buddy_system() {
+buddy_system::buddy_system()
+{
     memset(&_rgn, 0, sizeof _rgn);
     _align = 0;
     _max_blk_size = 0;
@@ -650,16 +716,19 @@ buddy_system::buddy_system() {
     memset(&_status, 0, sizeof(buddy_system_status));
 }
 
-buddy_system::~buddy_system() {
+buddy_system::~buddy_system()
+{
     _cleanup();
 }
 
-buddy_system::buddy_system(memrgn_t const& rgn, unsigned const align, unsigned const min_cof) :
-    buddy_system() {
+buddy_system::buddy_system(memrgn_t const& rgn, unsigned const align, unsigned const min_cof)
+    : buddy_system()
+{
     init(rgn, align, min_cof);
 }
 
-void buddy_system::init(memrgn_t const& rgn, unsigned const align, unsigned const min_cof) {
+void buddy_system::init(memrgn_t const& rgn, unsigned const align, unsigned const min_cof)
+{
     //TODO: badalloc handling
     assert(is_aligned_address(_rgn.ptr, align));
     cof_type const root_cof = static_cast<cof_type>(rgn.size / align);
@@ -677,41 +746,59 @@ void buddy_system::init(memrgn_t const& rgn, unsigned const align, unsigned cons
     _flist_v = _init_free_list_vec(_tbl.size(), _node_pool);
     _flist_v[0].emplace_front(block);
     _route.reserve(_tbl.max_level());
+    _total_allocated_size = 0;
     fprintf(stdout, "Buddy system is online. [%p, %" PRIu64 "]\n", rgn.ptr, rgn.size);
 }
 
-void* buddy_system::allocate(uint64_t size) {
+void* buddy_system::allocate(uint64_t size)
+{
     size += sizeof(buddy_block**);
-
     buddy_block* block = allocate_block(size);
+    if (block == nullptr)
+        return nullptr;
 
     auto const p = static_cast<buddy_block**>(block->rgn.ptr);
     *p = block;
     return p + 1;
 }
 
-void buddy_system::deallocate(void* p) {
+void buddy_system::deallocate(void* p)
+{
     if (p == nullptr)
         return;
-    _deallocate(*(static_cast<buddy_block**>(p) - 1));
+    deallocate_block(*(static_cast<buddy_block**>(p) - 1));
 }
 
-buddy_block* buddy_system::allocate_block(uint64_t const size) {
+buddy_block* buddy_system::allocate_block(uint64_t const size)
+{
     if ((size > _max_blk_size))
         return nullptr;
 
-    auto const result = _create_route(_tbl.best_fit(size));
-    if (!result.success)
+    assert(_route.empty());
+#ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+    assert(_route_dbg.empty());
+#endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+    blkidx_t bf = _tbl.best_fit(size);
+    auto const result = _create_route(bf);
+    if (!result.success) {
+        _route.clear();
+#ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+        _route_dbg.clear();
+#endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
         return nullptr; // bad alloc
+    }
 
     assert(!_route.empty());
+#ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+    assert(_route.size() == _route_dbg.size());
+#endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
     assert(!_flist_v[result.blkidx].empty());
     auto begin = _flist_v[result.blkidx].begin();
     buddy_block* block = *begin;
     _flist_v[result.blkidx].remove_node(begin);
 
     _route.pop();
-    blkidx_t idx_dbg = result.blkidx;
+    //blkidx_t idx_dbg = result.blkidx;
     buddy_block* child[2];
     while (!_route.empty()) {
 #ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
@@ -725,43 +812,53 @@ buddy_block* buddy_system::allocate_block(uint64_t const size) {
         buddy_block*& target = child[_route.peek()];
         buddy_block*& spare = child[!_route.peek()];
         assert(_flist_v[target->blkidx].empty());
-        idx_dbg = target->blkidx;
+        //idx_dbg = target->blkidx;
         spare->inv = _flist_v[spare->blkidx].emplace_front(spare).node();
 
         // update states
         block = target;
         _route.pop();
     }
-    _mixx_unused(idx_dbg);
 #ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
-    assert(_route_dbg.peek());
     _route_dbg.pop();
 #endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+
+    assert(block->in_use == false);
 
     block->in_use = true;
     block->inv = nullptr;
     _status.total_allocated += 1;
 
+    assert(_route.empty());
+#ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+    assert(_route_dbg.empty());
+#endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+
+    assert(size <= (uint64_t)(block->cof * _align));
+    _total_allocated_size += block->cof * _align;
     return block;
 }
 
-void buddy_system::deallocate_block(buddy_block* blk) {
+void buddy_system::deallocate_block(buddy_block* blk)
+{
+    _total_allocated_size -= blk->cof * _align;
     _deallocate(blk);
 }
 
-free_list_t* buddy_system::_init_free_list_vec(unsigned const size, free_list_t::pool_type& pool) {
+free_list_t* buddy_system::_init_free_list_vec(unsigned const size, free_list_t::pool_type& pool)
+{
     free_list_t* v = static_cast<free_list_t*>(calloc(size, sizeof(free_list_t)));
     if (v != nullptr) {
         for (unsigned i = 0; i < size; ++i)
             placement_new(&v[i], pool);
-    }
-    else {
+    } else {
         fprintf(stderr, "Bad alloc occured during initialize a free list vector of the buddy system!\n");
     }
     return v;
 }
 
-void buddy_system::_cleanup_free_list_vec(unsigned const size, free_list_t* v) {
+void buddy_system::_cleanup_free_list_vec(unsigned const size, free_list_t* v)
+{
     for (unsigned i = 0; i < size; ++i) {
         assert(i == 0 || v[i].empty());
         placement_delete(&v[i]);
@@ -769,7 +866,8 @@ void buddy_system::_cleanup_free_list_vec(unsigned const size, free_list_t* v) {
     delete v;
 }
 
-void buddy_system::_split_block(buddy_block* parent, buddy_block* left, buddy_block* right, buddy_table const& tbl) {
+void buddy_system::_split_block(buddy_block* parent, buddy_block* left, buddy_block* right, buddy_table const& tbl)
+{
     assert(parent->in_use == false);
 
     auto const left_block_index = [&tbl](buddy_block const* parent) -> blkidx_t {
@@ -813,7 +911,8 @@ void buddy_system::_split_block(buddy_block* parent, buddy_block* left, buddy_bl
     right->blkidx = right_block_index(parent);
 }
 
-void buddy_system::_deallocate(buddy_block* block) {
+void buddy_system::_deallocate(buddy_block* block)
+{
     assert(block->in_use == true);
     block->in_use = false;
     buddy_block* pair = block->pair;
@@ -829,7 +928,8 @@ void buddy_system::_deallocate(buddy_block* block) {
     _status.total_deallocated += 1;
 }
 
-void buddy_system::_cleanup() {
+void buddy_system::_cleanup()
+{
     //TODO: Implementation
     if (_flist_v == nullptr)
         return; // system is not initialized yet.
@@ -840,7 +940,8 @@ void buddy_system::_cleanup() {
     _tbl.clear();
 }
 
-buddy_block* buddy_system::_acquire_block(blkidx_t const bidx) const {
+buddy_block* buddy_system::_acquire_block(blkidx_t const bidx) const
+{
     free_list_t& list = _flist_v[bidx];
     if (list.empty())
         return nullptr;
@@ -966,7 +1067,8 @@ buddy_block* buddy_system::_acquire_block(blkidx_t const bidx) const {
  *
  */
 
-buddy_system::routing_result buddy_system::_create_route(blkidx_t bidx) {
+buddy_system::routing_result buddy_system::_create_route(blkidx_t bidx)
+{
     auto const append_idx_to_route_if_cached = [this](blkidx_t const idx) -> bool {
         auto const prop = _tbl.property(idx);
         if (!_flist_v[idx].empty()) {
@@ -982,12 +1084,12 @@ buddy_system::routing_result buddy_system::_create_route(blkidx_t bidx) {
 #ifdef MIXX_BUDDY_SYSTEM_PREVENT_ROOT_ALLOC
     // Terminate if the target block is a root node
     if (MIXX_UNLIKELY(blkidx == 0))
-        return routing_result{ false, 0 }; // bad alloc
+        return routing_result { false, 0 }; // bad alloc
 #endif
 
     // Lookup caches of requested block index
     if (append_idx_to_route_if_cached(bidx))
-        return routing_result{ true, bidx };
+        return routing_result { true, bidx };
 
     // If the requested block is R-A3B1,
     // restart the routine to allocate a neighbor block
@@ -1012,29 +1114,27 @@ buddy_system::routing_result buddy_system::_create_route(blkidx_t bidx) {
         prop = _tbl.property(bidx);
         if (prop.check(UniqueBuddyBlock)) {
             if (append_idx_to_route_if_cached(bidx))
-                return routing_result{ true, bidx };
+                return routing_result { true, bidx };
             // Append the current index to the route (Unique: 0)
             _route.push(0);
 #ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
             _route_dbg.push(bidx);
 #endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
-        }
-        else if (prop.check(A1B3Pattern)) {
+        } else if (prop.check(A1B3Pattern)) {
             if (append_idx_to_route_if_cached(bidx))
-                return routing_result{ true, bidx };
+                return routing_result { true, bidx };
             if (append_idx_to_route_if_cached(bidx + 1))
-                return routing_result{ true, bidx + 1 };
+                return routing_result { true, bidx + 1 };
             // Append the frequent block index to the route (A1B3 => Offset of B: 1)
             _route.push(1);
 #ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
             _route_dbg.push(bidx + 1);
 #endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
-        }
-        else if (prop.check(A3B1Pattern)) {
+        } else if (prop.check(A3B1Pattern)) {
             if (append_idx_to_route_if_cached(bidx + 1))
-                return routing_result{ true, bidx + 1 };
+                return routing_result { true, bidx + 1 };
             if (append_idx_to_route_if_cached(bidx))
-                return routing_result{ true, bidx };
+                return routing_result { true, bidx };
             // Append the frequent block index to the route (A3B1 => Offset of A: 0)
             _route.push(0);
 #ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
@@ -1044,16 +1144,23 @@ buddy_system::routing_result buddy_system::_create_route(blkidx_t bidx) {
     } while (bidx > 0);
 
     if (append_idx_to_route_if_cached(0))
-        return routing_result{ true, 0 };
+        return routing_result { true, 0 };
 
-    return routing_result{ false, bidx };
+    return routing_result { false, bidx };
 }
 
-void hashed_buddy_system::init(memrgn_t const& rgn, unsigned align, unsigned min_cof) {
+portable_buddy_system::portable_buddy_system(memrgn_t const& rgn, unsigned align, unsigned min_cof)
+{
+    init(rgn, align, min_cof);
+}
+
+void portable_buddy_system::init(memrgn_t const& rgn, unsigned align, unsigned min_cof)
+{
     buddy.init(rgn, align, min_cof);
 }
 
-void* hashed_buddy_system::allocate(uint64_t size) {
+void* portable_buddy_system::allocate(uint64_t size)
+{
     buddy_block* block = buddy.allocate_block(size);
     if (block == nullptr)
         return nullptr;
@@ -1063,10 +1170,12 @@ void* hashed_buddy_system::allocate(uint64_t size) {
     return p;
 }
 
-void hashed_buddy_system::deallocate(void* p) {
+void portable_buddy_system::deallocate(void* p)
+{
     assert(hashmap.find(p) != hashmap.end());
     buddy_block* block = hashmap.at(p);
     buddy.deallocate_block(block);
+    hashmap.erase(p);
 }
 
 } // !namespace _buddy_impl

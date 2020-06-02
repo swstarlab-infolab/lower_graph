@@ -1,89 +1,85 @@
-#if __GNUC__ < 8
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#else
-#include <filesystem>
-namespace fs = std::filesystem;
-#endif
-
+#include "DataManager.h"
+#include "ExecutionManager.h"
+#include "ScheduleManager.h"
+#include "make.h"
+#include "type.h"
 #include <GridCSR/GridCSR.h>
-#include <cuda_runtime.h>
-
-#include <stdio.h>
-#include <vector>
-#include <thread>
-
-#include "manager.h"
-#include "context.h"
 #include <boost/fiber/all.hpp>
+#include <cuda_runtime.h>
+#include <iostream>
+#include <stdio.h>
+#include <thread>
+#include <vector>
 
-template <typename Type, size_t Size=128>
-auto makeChan() {
-    return std::shared_ptr<Type>(
-        new Type(Size),
-        [](Type* p){
-            if (p != nullptr) {
-                delete p;
-            }
-        });
-}
-
-int main(int argc, char* argv[]) {
+void init(Context& ctx, int argc, char* argv[])
+{
+    // Argument
     if (argc != 5) {
-        fprintf(stderr, "usage: %s <folderPath> <streams> <blocks> <threads>\n", argv[0]);
-        return 0;
+        fprintf(stderr, "usage: %s <folderPath> <streams> <blocks> <threads>\n",
+            argv[0]);
+        exit(EXIT_FAILURE);
     }
 
-    auto const folderPath  = fs::path(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
-    //auto const folderPath  = boost::filesystem::path(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
-    auto const streamCount = strtol(argv[2], nullptr, 10);
-    auto const blockCount  = strtol(argv[3], nullptr, 10);
-    auto const threadCount = strtol(argv[4], nullptr, 10);
+    ctx.folderPath = fs::path(
+        fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
+    ctx.meta.Load(ctx.folderPath / "meta.json");
+    for (int i = 0; i < 3; i++) {
+        ctx.setting[i] = strtol(argv[i + 2], nullptr, 10);
+        fprintf(stdout, "%ld ", ctx.setting[i]);
+    }
+    fprintf(stdout, "\n");
 
     // get total GPUs
-    int deviceCount = -1;
-    cudaGetDeviceCount(&deviceCount);
+    cudaGetDeviceCount(&ctx.deviceCount);
 
-    // prepare context
+    //  0   : CPU
+    //  1~ N: GPU
+    // -1~-N: Storage
+    for (int32_t i = 1; i <= ctx.deviceCount; i++) {
+        typename Context::Connections c;
+        c.upstream = 0;
+        for (int32_t j = 1; j <= ctx.deviceCount; j++) {
+            if (i != j) {
+                c.neighbor.push_back(j);
+            }
+        }
+        ctx.conn[i] = c;
+    }
+
+    // CPU
+    ctx.conn[0] = { -1, {} };
+
+    // SSD
+    ctx.conn[-1] = { -1, {} };
+
+    for (int32_t i = 1; i <= ctx.deviceCount; i++) {
+        ctx.memChan[i] = make<bchan<DataRequest<MemoryInfo>>>(16);
+    }
+    ctx.memChan[0] = make<bchan<DataRequest<MemoryInfo>>>(16);
+    ctx.fileChan[-1] = make<bchan<DataRequest<FileInfo>>>(16);
+}
+
+int main(int argc, char* argv[])
+{
     Context ctx;
-    ctx.meta.Load(folderPath / "meta.json");
+    init(ctx, argc, argv);
 
-    // prepare channels
-    typename Manager::chanCmdReq cmdReq(16);
+    auto exeReq = ScheduleManager(ctx);
 
-    std::vector<std::shared_ptr<Manager::chanCmdRes>> cmdRes(deviceCount);
-    for (auto i = 0; i < deviceCount; i++) {
-        cmdRes[i] = makeChan<Manager::chanCmdRes>();
+    using DataChanType = std::shared_ptr<bchan<DataRequest<MemoryInfo>>>;
+    using CompChanType = std::shared_ptr<bchan<CommandResult>>;
+
+    std::vector<DataChanType> dataChans(ctx.deviceCount);
+    std::vector<CompChanType> compChans(ctx.deviceCount);
+
+    for (int i = 0; i < ctx.deviceCount; i++) {
+        dataChans[i] = make<bchan<DataRequest<MemoryInfo>>>(16);
+        DataManager(ctx, i + 1);
+        compChans[i] = Computation(ctx, i + 1, exeReq);
     }
 
-    Manager::chanLoadReq loadReq(16);
-
-    std::vector<std::shared_ptr<Manager::chanLoadRes>> loadRes(deviceCount);
-    for (auto i = 0; i < deviceCount; i++) {
-        loadRes[i] = makeChan<Manager::chanLoadRes>();
-    }
-
-    // prepare thread
-    std::vector<boost::fibers::fiber> gpuMgr(deviceCount);
-
-    // launch thread
-    auto cmdMgr = boost::fibers::fiber([&]{ Manager::commander(ctx, cmdReq, cmdRes); });
-    for (size_t i = 0; i < gpuMgr.size(); i++) {
-        gpuMgr[i] = boost::fibers::fiber([&ctx, &cmdReq, &cmdRes, &loadReq, &loadRes, i]{
-            Manager::Execute::GPU(
-                ctx,
-                cmdReq,
-                cmdRes[i].get(),
-                loadReq,
-                loadRes[i].get(),
-                i); });
-    }
-
-    // join thread
-    cmdMgr.join();
-    for (size_t i = 0; i < gpuMgr.size(); i++) {
-        gpuMgr[i].join();
-    }
+    auto c = merge(compChans);
+    ScheduleWaiter(c);
 
     return 0;
 }

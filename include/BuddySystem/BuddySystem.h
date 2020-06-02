@@ -4,20 +4,23 @@
  * 5/6/2020
  * Seyeon Oh
  */
-#pragma once
-#include <type_traits>
-#include <utility>
+
+#ifndef C126BD0E_DC93_472C_912E_D1755628B23E
+#define C126BD0E_DC93_472C_912E_D1755628B23E
+#include <assert.h>
 #include <memory>
 #include <stdint.h>
 #include <string.h>
-#include <assert.h>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 typedef struct memory_region {
     void* ptr;
     uint64_t size;
 
-    bool is_null() const {
+    bool is_null() const
+    {
         return ptr == nullptr;
     }
 } memrgn_t;
@@ -37,7 +40,8 @@ typedef struct buddy_block_propoerty {
     unsigned char dist : 2;
     unsigned char offset : 1;
 
-    bool check(unsigned char bits) const {
+    bool check(unsigned char bits) const
+    {
         return (flags & bits) == bits;
     }
 } blk_prop_t;
@@ -45,20 +49,20 @@ static_assert(sizeof(buddy_block_propoerty) == 1, "a size of buddy_block_propert
 
 namespace _noncopyable { // protection from unintended ADL
 
-class noncopyable {
-public:
-    noncopyable(const noncopyable&) = delete;
-    noncopyable& operator=(const noncopyable&) = delete;
-protected:
-    /*constexpr*/ noncopyable() = default;
-    ~noncopyable() = default;
-};
+    class noncopyable {
+    public:
+        noncopyable(const noncopyable&) = delete;
+        noncopyable& operator=(const noncopyable&) = delete;
+
+    protected:
+        /*constexpr*/ noncopyable() = default;
+        ~noncopyable() = default;
+    };
 
 } // !namespace _noncopyable
 
 class buddy_table : _noncopyable::noncopyable {
 public:
-
     buddy_table();
     ~buddy_table() noexcept;
     buddy_table(cof_type root_cof, unsigned align, cof_type min_cof);
@@ -68,27 +72,33 @@ public:
 
     blkidx_t best_fit(uint64_t block_size) const;
 
-    unsigned align() const {
+    unsigned align() const
+    {
         return _align;
     }
 
-    unsigned size() const {
+    unsigned size() const
+    {
         return _tbl_size;
     }
 
-    level_t max_level() const {
+    level_t max_level() const
+    {
         return _attr.level_v[_tbl_size - 1];
     }
 
-    level_t level(blkidx_t const bidx) const {
+    level_t level(blkidx_t const bidx) const
+    {
         return _attr.level_v[bidx];
     }
 
-    cof_type cof(blkidx_t const bidx) const {
+    cof_type cof(blkidx_t const bidx) const
+    {
         return _attr.cof_v[bidx];
     }
 
-    blk_prop_t const& property(blkidx_t const bidx) const {
+    blk_prop_t const& property(blkidx_t const bidx) const
+    {
         return _attr.prof_v[bidx];
     }
 
@@ -103,18 +113,20 @@ protected:
 
     unsigned _align;
     cof_type _min_cof;
-    level_t  _tbl_size;
-    level_t  _buddy_lv;
+    level_t _tbl_size;
+    level_t _buddy_lv;
     tbl_attr _attr;
 };
 
-template <typename T, typename ...Args>
-inline void placement_new(T* p, Args&& ...args) {
+template <typename T, typename... Args>
+inline void placement_new(T* p, Args&&... args)
+{
     new (p) T(std::forward<Args>(args)...);
 }
 
 template <typename T>
-inline void placement_delete(T* p) {
+inline void placement_delete(T* p)
+{
     p->~T();
 }
 
@@ -133,38 +145,46 @@ public:
     public:
         using node_type = list_node<T>;
         using value_type = T;
-        explicit list_iterator(void* p = nullptr) {
+        explicit list_iterator(void* p = nullptr)
+        {
             _p = static_cast<node_type*>(p);
         }
 
-        inline list_iterator& operator++() {
+        inline list_iterator& operator++()
+        {
             _p = _p->next;
             return *this;
         }
 
-        inline list_iterator& operator++(int) {
+        inline list_iterator& operator++(int)
+        {
             list_iterator tmp(*this);
             _p = _p->next;
             return tmp;
         }
 
-        inline value_type& operator*() {
+        inline value_type& operator*()
+        {
             return _p->value;
         }
 
-        inline bool operator==(list_iterator const& rhs) {
+        inline bool operator==(list_iterator const& rhs)
+        {
             return _p == rhs._p;
         }
 
-        inline bool operator!=(list_iterator const& rhs) {
+        inline bool operator!=(list_iterator const& rhs)
+        {
             return _p != rhs._p;
         }
 
-        inline node_type* node() const {
+        inline node_type* node() const
+        {
             return _p;
         }
 
-        inline void invalidate() {
+        inline void invalidate()
+        {
             _p = nullptr;
         }
 
@@ -172,37 +192,42 @@ public:
         node_type* _p;
     };
 
-    template <typename List, typename ... Args>
-    static typename List::iterator emplace_back_to(List& list, typename List::iterator const& target, Args&&... args) {
+    template <typename List, typename... Args>
+    static typename List::iterator emplace_back_to(List& list, typename List::iterator const& target, Args&&... args)
+    {
         auto dest = target.node();
         auto next = dest->next;
         auto node = list._allocate_node();
-        placement_new<typename List::value_type>(&node->value, std::forward <Args>(args)...);
-        node->prev = dest; node->next = next;
+        placement_new<typename List::value_type>(&node->value, std::forward<Args>(args)...);
+        node->prev = dest;
+        node->next = next;
         dest->next = node;
         if (next != nullptr)
             next->prev = node;
         else
             list._tail = node;
         list._size += 1;
-        return typename List::iterator{ node };
+        return typename List::iterator { node };
     }
 
-    template <typename List, typename ... Args>
-    static typename List::iterator emplace_front_of(List& list, typename List::iterator const& target, Args&&... args) {
+    template <typename List, typename... Args>
+    static typename List::iterator emplace_front_of(List& list, typename List::iterator const& target, Args&&... args)
+    {
         auto dest = target.node();
         auto prev = dest->prev;
         auto node = list._allocate_node();
-        placement_new<typename List::value_type>(&node->value, std::forward <Args>(args)...);
-        node->prev = prev; node->next = dest;
+        placement_new<typename List::value_type>(&node->value, std::forward<Args>(args)...);
+        node->prev = prev;
+        node->next = dest;
         dest->prev = node;
         prev->next = node;
         list._size == 1;
-        return typename List::iterator{ node };
+        return typename List::iterator { node };
     }
 
     template <typename List>
-    static typename List::iterator remove_node(List& list, typename List::iterator const& target) {
+    static typename List::iterator remove_node(List& list, typename List::iterator const& target)
+    {
         auto dest = target.node();
         auto prev = dest->prev;
         auto next = dest->next;
@@ -214,76 +239,85 @@ public:
             list._tail = prev;
         list._deallocate_node(dest);
         list._size -= 1;
-        return typename List::iterator{ next };
+        return typename List::iterator { next };
     }
 };
 
 namespace detail {
 
-namespace _seq_cont_manipulation {
+    namespace _seq_cont_manipulation {
 
-template <typename T>
-using pod_type_tracing = std::integral_constant<bool, std::is_pod<T>::value>;
+        template <typename T>
+        using pod_type_tracing = std::integral_constant<bool, std::is_pod<T>::value>;
 
-template <typename T>
-using pod_type = std::integral_constant<bool, true>;
+        template <typename T>
+        using pod_type = std::integral_constant<bool, true>;
 
-template <typename T>
-using non_pod_t = std::integral_constant<bool, false>;
+        template <typename T>
+        using non_pod_t = std::integral_constant<bool, false>;
 
-template <typename T>
-void copy_array(T* __restrict dst, T* __restrict src, size_t size, pod_type<T>) {
-    memcpy(dst, src, sizeof(T) * size);
-}
+        template <typename T>
+        void copy_array(T* __restrict dst, T* __restrict src, size_t size, pod_type<T>)
+        {
+            memcpy(dst, src, sizeof(T) * size);
+        }
 
-template <typename T>
-void copy_array(T* __restrict dst, T* __restrict src, size_t size, non_pod_t<T>) {
-    for (size_t i = 0; i < size; ++i)
-        dst[i] = src[i];
-}
+        template <typename T>
+        void copy_array(T* __restrict dst, T* __restrict src, size_t size, non_pod_t<T>)
+        {
+            for (size_t i = 0; i < size; ++i)
+                dst[i] = src[i];
+        }
 
-template <typename T>
-void move_array(T* __restrict dst, T* __restrict src, size_t size, pod_type<T>) {
-    memcpy(dst, src, sizeof(T) * size);
-}
+        template <typename T>
+        void move_array(T* __restrict dst, T* __restrict src, size_t size, pod_type<T>)
+        {
+            memcpy(dst, src, sizeof(T) * size);
+        }
 
-template <typename T>
-void move_array(T* __restrict dst, T* __restrict src, size_t size, non_pod_t<T>) {
-    for (size_t i = 0; i < size; ++i)
-        dst[i] = std::move(src[i]);
-}
+        template <typename T>
+        void move_array(T* __restrict dst, T* __restrict src, size_t size, non_pod_t<T>)
+        {
+            for (size_t i = 0; i < size; ++i)
+                dst[i] = std::move(src[i]);
+        }
 
-template <typename T>
-void clear_array(T* dst, size_t size, pod_type<T>) {
-    memset(dst, 0, sizeof(T) * size);
-}
+        template <typename T>
+        void clear_array(T* dst, size_t size, pod_type<T>)
+        {
+            memset(dst, 0, sizeof(T) * size);
+        }
 
-template <typename T>
-void clear_array(T* dst, size_t size, non_pod_t<T>) {
-    for (size_t i = 0; i < size; ++i)
-        dst.~T();
-}
+        template <typename T>
+        void clear_array(T* dst, size_t size, non_pod_t<T>)
+        {
+            for (size_t i = 0; i < size; ++i)
+                dst.~T();
+        }
 
-} // !namespace _seq_cont_manipulation
+    } // !namespace _seq_cont_manipulation
 
 } // !namespace detail
 
 template <typename T>
-void copy_array(T* __restrict dst, T* __restrict src, size_t size) {
+void copy_array(T* __restrict dst, T* __restrict src, size_t size)
+{
     using namespace detail;
     using namespace _seq_cont_manipulation;
     copy_array(dst, src, size, pod_type_tracing<T>());
 }
 
 template <typename T>
-void move_array(T* __restrict dst, T* __restrict src, size_t size) {
+void move_array(T* __restrict dst, T* __restrict src, size_t size)
+{
     using namespace detail;
     using namespace _seq_cont_manipulation;
     move_array(dst, src, size, pod_type_tracing<T>());
 }
 
 template <typename T>
-void clear_array(T* dst, size_t size) {
+void clear_array(T* dst, size_t size)
+{
     using namespace detail;
     using namespace _seq_cont_manipulation;
     clear_array(dst, size, pod_type_tracing<T>());
@@ -302,7 +336,8 @@ public:
     stack& operator=(stack&& rhs) noexcept;
     size_t push(value_type const& lvalue);
     size_t push(value_type&& rvalue);
-    template <typename ...Args> size_t emplace(Args&& ...);
+    template <typename... Args>
+    size_t emplace(Args&&...);
     bool pop();
     bool pop(value_type*);
     value_type& peek();
@@ -311,7 +346,7 @@ public:
     size_t size() const;
     void clear();
     void reserve(size_t new_capacity);
-    void iterate(void(*f)(value_type&));
+    void iterate(void (*f)(value_type&));
 
     void _config(size_t top);
     value_type* _get_buffer();
@@ -327,16 +362,19 @@ protected:
 };
 
 template <typename T>
-inline typename std::enable_if<std::is_signed<T>::value, T>::type roundup(const T n, const T m) {
+inline typename std::enable_if<std::is_signed<T>::value, T>::type roundup(const T n, const T m)
+{
     return ((n + ((n >= 0) ? 1 : 0) * (m - 1)) / m) * m;
 }
 
 template <typename T>
-inline typename std::enable_if<std::is_unsigned<T>::value, T>::type roundup(const T n, const T m) {
+inline typename std::enable_if<std::is_unsigned<T>::value, T>::type roundup(const T n, const T m)
+{
     return ((n + m - 1) / m) * m;
 }
 
-inline uint32_t roundup2_nonzero(uint32_t n) {
+inline uint32_t roundup2_nonzero(uint32_t n)
+{
     --n;
     n |= (n >> 1);
     n |= (n >> 2);
@@ -347,12 +385,14 @@ inline uint32_t roundup2_nonzero(uint32_t n) {
     return n;
 }
 
-inline uint32_t roundup2(uint32_t n) {
+inline uint32_t roundup2(uint32_t n)
+{
     n += (n == 0);
     return roundup2_nonzero(n);
 }
 
-inline uint64_t roundup2_nonzero(uint64_t n) {
+inline uint64_t roundup2_nonzero(uint64_t n)
+{
     --n;
     n |= (n >> 1);
     n |= (n >> 2);
@@ -364,22 +404,25 @@ inline uint64_t roundup2_nonzero(uint64_t n) {
     return n;
 }
 
-inline uint64_t roundup2(uint64_t n) {
+inline uint64_t roundup2(uint64_t n)
+{
     n += (n == 0);
     return roundup2_nonzero(n);
 }
 
 template <typename ValueType, typename Allocator>
-stack<ValueType, Allocator>::stack(size_t const capacity_, alloc_type const& alloc) :
-    _alloc(alloc) {
+stack<ValueType, Allocator>::stack(size_t const capacity_, alloc_type const& alloc)
+    : _alloc(alloc)
+{
     _cap = roundup2(capacity_);
     _top = 0;
     _cont = std::allocator_traits<alloc_type>::allocate(_alloc, _cap);
 }
 
 template <typename ValueType, typename Allocator>
-stack<ValueType, Allocator>::stack(stack const& other) :
-    _alloc(other._alloc) {
+stack<ValueType, Allocator>::stack(stack const& other)
+    : _alloc(other._alloc)
+{
     _cap = other._cap;
     _top = other._top;
     _cont = std::allocator_traits<alloc_type>::allocate(_alloc, _cap);
@@ -387,8 +430,9 @@ stack<ValueType, Allocator>::stack(stack const& other) :
 }
 
 template <typename ValueType, typename Allocator>
-stack<ValueType, Allocator>::stack(stack&& other) noexcept :
-    _alloc(std::move(other._alloc)) {
+stack<ValueType, Allocator>::stack(stack&& other) noexcept
+    : _alloc(std::move(other._alloc))
+{
     _cap = other._cap;
     _top = other._top;
     _cont = other._cont;
@@ -396,12 +440,14 @@ stack<ValueType, Allocator>::stack(stack&& other) noexcept :
 }
 
 template <typename ValueType, typename Allocator>
-stack<ValueType, Allocator>::~stack() noexcept {
+stack<ValueType, Allocator>::~stack() noexcept
+{
     _release_container();
 }
 
 template <typename ValueType, typename Allocator>
-stack<ValueType, Allocator>& stack<ValueType, Allocator>::operator=(stack const& rhs) {
+stack<ValueType, Allocator>& stack<ValueType, Allocator>::operator=(stack const& rhs)
+{
     _release_container();
     _alloc = rhs._alloc;
     _cap = rhs._cap;
@@ -412,7 +458,8 @@ stack<ValueType, Allocator>& stack<ValueType, Allocator>::operator=(stack const&
 }
 
 template <typename ValueType, typename Allocator>
-stack<ValueType, Allocator>& stack<ValueType, Allocator>::operator=(stack&& rhs) noexcept {
+stack<ValueType, Allocator>& stack<ValueType, Allocator>::operator=(stack&& rhs) noexcept
+{
     _release_container();
     _alloc = std::move(rhs._alloc);
     _cap = rhs._cap;
@@ -423,30 +470,35 @@ stack<ValueType, Allocator>& stack<ValueType, Allocator>::operator=(stack&& rhs)
 }
 
 template <typename ValueType, typename Allocator>
-size_t stack<ValueType, Allocator>::push(value_type const& lvalue) {
+size_t stack<ValueType, Allocator>::push(value_type const& lvalue)
+{
     value_type* buf = _acquire_buffer();
     new (buf) value_type(lvalue);
     return _top - 1;
 }
 
 template <typename ValueType, typename Allocator>
-size_t stack<ValueType, Allocator>::push(value_type&& rvalue) {
+size_t stack<ValueType, Allocator>::push(value_type&& rvalue)
+{
     value_type* buf = _acquire_buffer();
     new (buf) value_type(std::move(rvalue));
     return _top - 1;
 }
 
 template <typename ValueType, typename Allocator>
-template <typename ... Args>
-size_t stack<ValueType, Allocator>::emplace(Args&&... args) {
+template <typename... Args>
+size_t stack<ValueType, Allocator>::emplace(Args&&... args)
+{
     value_type* buf = _acquire_buffer();
     new (buf) value_type(std::forward<Args>(args)...);
     return _top - 1;
 }
 
 template <typename ValueType, typename Allocator>
-bool stack<ValueType, Allocator>::pop() {
-    if (empty()) return false;
+bool stack<ValueType, Allocator>::pop()
+{
+    if (empty())
+        return false;
     value_type& val = peek();
     val.~value_type();
     _top -= 1;
@@ -454,8 +506,10 @@ bool stack<ValueType, Allocator>::pop() {
 }
 
 template <typename ValueType, typename Allocator>
-bool stack<ValueType, Allocator>::pop(value_type* out) {
-    if (empty()) return false;
+bool stack<ValueType, Allocator>::pop(value_type* out)
+{
+    if (empty())
+        return false;
     value_type& val = peek();
     *out = std::move(val);
     val.~value_type();
@@ -464,34 +518,41 @@ bool stack<ValueType, Allocator>::pop(value_type* out) {
 }
 
 template <typename ValueType, typename Allocator>
-typename stack<ValueType, Allocator>::value_type& stack<ValueType, Allocator>::peek() {
+typename stack<ValueType, Allocator>::value_type& stack<ValueType, Allocator>::peek()
+{
     assert(_top > 0);
     return _cont[_top - 1];
 }
 
 template <typename ValueType, typename Allocator>
-bool stack<ValueType, Allocator>::empty() const {
+bool stack<ValueType, Allocator>::empty() const
+{
     return _top == 0;
 }
 
 template <typename ValueType, typename Allocator>
-size_t stack<ValueType, Allocator>::capacity() const {
+size_t stack<ValueType, Allocator>::capacity() const
+{
     return _cap;
 }
 
 template <typename ValueType, typename Allocator>
-size_t stack<ValueType, Allocator>::size() const {
+size_t stack<ValueType, Allocator>::size() const
+{
     return _top;
 }
 
 template <typename ValueType, typename Allocator>
-void stack<ValueType, Allocator>::clear() {
+void stack<ValueType, Allocator>::clear()
+{
     clear_array(_cont, size());
 }
 
 template <typename ValueType, typename Allocator>
-void stack<ValueType, Allocator>::reserve(size_t new_capacity) {
-    if (_cap >= new_capacity) return;
+void stack<ValueType, Allocator>::reserve(size_t new_capacity)
+{
+    if (_cap >= new_capacity)
+        return;
     new_capacity = roundup2(new_capacity);
     assert(_top < new_capacity);
     value_type* old = _cont;
@@ -502,7 +563,8 @@ void stack<ValueType, Allocator>::reserve(size_t new_capacity) {
 }
 
 template <typename ValueType, typename Allocator>
-void stack<ValueType, Allocator>::iterate(void(*f)(value_type&)) {
+void stack<ValueType, Allocator>::iterate(void (*f)(value_type&))
+{
     if (size() == 0)
         return;
     for (size_t i = _top; i != 0; --i) {
@@ -511,23 +573,27 @@ void stack<ValueType, Allocator>::iterate(void(*f)(value_type&)) {
 }
 
 template <typename ValueType, typename Allocator>
-void stack<ValueType, Allocator>::_config(size_t const top) {
+void stack<ValueType, Allocator>::_config(size_t const top)
+{
     _top = top;
 }
 
 template <typename ValueType, typename Allocator>
-typename stack<ValueType, Allocator>::value_type* stack<ValueType, Allocator>::_get_buffer() {
+typename stack<ValueType, Allocator>::value_type* stack<ValueType, Allocator>::_get_buffer()
+{
     return _cont;
 }
 
 template <typename ValueType, typename Allocator>
-void stack<ValueType, Allocator>::_release_container() {
+void stack<ValueType, Allocator>::_release_container()
+{
     if (_cont != nullptr)
         std::allocator_traits<alloc_type>::deallocate(_alloc, _cont, _cap);
 }
 
 template <typename ValueType, typename Allocator>
-typename stack<ValueType, Allocator>::value_type* stack<ValueType, Allocator>::_acquire_buffer() {
+typename stack<ValueType, Allocator>::value_type* stack<ValueType, Allocator>::_acquire_buffer()
+{
     if (_top == _cap)
         reserve(_cap * 2);
     return &_cont[_top++];
@@ -558,20 +624,23 @@ public:
     constexpr static size_t cluster_size = ClusterSize;
     constexpr static double recycle_factor = 0.5F;
 
-    explicit object_pool(size_t reserved = cluster_size, const alloc_type& alloc = alloc_type{});
+    explicit object_pool(size_t reserved = cluster_size, const alloc_type& alloc = alloc_type {});
     ~object_pool() noexcept;
-    template <typename ...Args> value_type* construct(Args&& ...args);
+    template <typename... Args>
+    value_type* construct(Args&&... args);
     value_type* allocate();
     value_type* allocate_zero_initialized();
     void destroy(value_type* p);
     void deallocate(value_type* p);
     void reserve(size_t required);
 
-    size_t num_clusters() const {
+    size_t num_clusters() const
+    {
         return _num_nodes;
     }
 
-    size_t capacity() const {
+    size_t capacity() const
+    {
         return _capacity;
     }
 
@@ -596,9 +665,10 @@ protected:
         template rebind_alloc<cluster_node>;
     using node_stack_t = stack<cluster_node*,
         typename std::allocator_traits<alloc_type>::
-        template rebind_alloc<cluster_node*>>;
+            template rebind_alloc<cluster_node*>>;
 
-    cluster_node* _allocate_node() {
+    cluster_node* _allocate_node()
+    {
         cluster_node* node = std::allocator_traits<node_alloc_t>::allocate(_node_alloc, 1);
         placement_new(&node->cluster, node->buffer, cluster_region_size, cluster_size);
         node->next = nullptr;
@@ -609,14 +679,16 @@ protected:
         return node;
     }
 
-    void _deallocate_node(cluster_node* node) {
+    void _deallocate_node(cluster_node* node)
+    {
         placement_delete(&node->cluster);
         std::allocator_traits<node_alloc_t>::deallocate(_node_alloc, node, 1);
         _num_nodes -= 1;
         _capacity -= cluster_size;
     }
 
-    void _insert_back_to(cluster_node* target, cluster_node* node) {
+    void _insert_back_to(cluster_node* target, cluster_node* node)
+    {
         cluster_node* next = target->next;
         node->next = target->next;
         node->prev = target;
@@ -625,7 +697,8 @@ protected:
             next->prev = node;
     }
 
-    cluster_node* _detach_node(cluster_node* node) noexcept {
+    cluster_node* _detach_node(cluster_node* node) noexcept
+    {
         cluster_node* prev = node->prev;
         cluster_node* next = node->next;
         if (prev != nullptr)
@@ -644,19 +717,21 @@ protected:
 };
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-object_pool<ValueType, ClusterSize, Allocator>::object_pool(size_t reserved, const alloc_type& alloc) :
-    _alloc(alloc),
-    _capacity(0),
-    _num_nodes(0),
-    _node_alloc(alloc),
-    _node_stack(256) {
+object_pool<ValueType, ClusterSize, Allocator>::object_pool(size_t reserved, const alloc_type& alloc)
+    : _alloc(alloc)
+    , _capacity(0)
+    , _num_nodes(0)
+    , _node_alloc(alloc)
+    , _node_stack(256)
+{
     assert(_capacity % cluster_size == 0);
     _curr = _allocate_node();
     reserve(reserved);
 }
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-object_pool<ValueType, ClusterSize, Allocator>::~object_pool() noexcept {
+object_pool<ValueType, ClusterSize, Allocator>::~object_pool() noexcept
+{
 #ifdef MIXX_DEBUG_ENABLE_OBJECT_LEAK_DETECTION
     assert(_curr->prev == nullptr);
     assert(_curr->next == nullptr);
@@ -671,17 +746,17 @@ object_pool<ValueType, ClusterSize, Allocator>::~object_pool() noexcept {
 }
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-template <typename ... Args>
-typename object_pool<ValueType, ClusterSize, Allocator>::value_type* object_pool<ValueType, ClusterSize, Allocator>
-::construct(Args&&... args) {
+template <typename... Args>
+typename object_pool<ValueType, ClusterSize, Allocator>::value_type* object_pool<ValueType, ClusterSize, Allocator>::construct(Args&&... args)
+{
     value_type* p = this->allocate();
     new (p) value_type(std::forward<Args>(args)...);
     return p;
 }
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-typename object_pool<ValueType, ClusterSize, Allocator>::value_type* object_pool<ValueType, ClusterSize, Allocator>
-::allocate() {
+typename object_pool<ValueType, ClusterSize, Allocator>::value_type* object_pool<ValueType, ClusterSize, Allocator>::allocate()
+{
     auto deploy_block = [](block_type* blk, cluster_node* key) -> value_type* {
         blk->key = key;
         return &blk->value;
@@ -719,21 +794,23 @@ typename object_pool<ValueType, ClusterSize, Allocator>::value_type* object_pool
 }
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-typename object_pool<ValueType, ClusterSize, Allocator>::value_type* object_pool<ValueType, ClusterSize, Allocator>
-::allocate_zero_initialized() {
+typename object_pool<ValueType, ClusterSize, Allocator>::value_type* object_pool<ValueType, ClusterSize, Allocator>::allocate_zero_initialized()
+{
     value_type* p = this->allocate();
     memset(p, 0, sizeof(value_type));
     return p;
 }
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-void object_pool<ValueType, ClusterSize, Allocator>::destroy(value_type* p) {
+void object_pool<ValueType, ClusterSize, Allocator>::destroy(value_type* p)
+{
     p->~value_type();
     this->deallocate(p);
 }
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-void object_pool<ValueType, ClusterSize, Allocator>::deallocate(value_type* p) {
+void object_pool<ValueType, ClusterSize, Allocator>::deallocate(value_type* p)
+{
     block_type* blk = reinterpret_cast<block_type*>(reinterpret_cast<char*>(p) - sizeof(void*));
     cluster_node* node = static_cast<cluster_node*>(blk->key);
     node->cluster.deallocate(blk);
@@ -749,7 +826,8 @@ void object_pool<ValueType, ClusterSize, Allocator>::deallocate(value_type* p) {
 }
 
 template <typename ValueType, size_t ClusterSize, typename Allocator>
-void object_pool<ValueType, ClusterSize, Allocator>::reserve(size_t required) {
+void object_pool<ValueType, ClusterSize, Allocator>::reserve(size_t required)
+{
     if (required <= _capacity)
         return;
     size_t remained = roundup(required, cluster_size) - _capacity;
@@ -765,13 +843,14 @@ void object_pool<ValueType, ClusterSize, Allocator>::reserve(size_t required) {
 }
 
 template <typename T, size_t ClusterSize = 256>
-using list_node_pool_trait = object_pool< list_impl::list_node<T>, ClusterSize>;
+using list_node_pool_trait = object_pool<list_impl::list_node<T>, ClusterSize>;
 
 /* class pooling_list */
 
-template <typename T, typename Pool = list_node_pool_trait<T> >
+template <typename T, typename Pool = list_node_pool_trait<T>>
 class pooling_list : _noncopyable::noncopyable {
     friend class list_impl;
+
 public:
     using node_type = list_impl::list_node<T>;
     using node_pointer = node_type*;
@@ -781,41 +860,52 @@ public:
 
     explicit pooling_list(pool_type& pool);
     ~pooling_list() noexcept;
-    template <typename ...Args> iterator emplace_front_of(iterator const& target, Args&& ...args);
-    template <typename ...Args> iterator emplace_back_to(iterator const& target, Args&& ...args);
-    template <typename ...Args> iterator emplace_front(Args&& ...args);
-    template <typename ...Args> iterator emplace_back(Args&& ...args);
+    template <typename... Args>
+    iterator emplace_front_of(iterator const& target, Args&&... args);
+    template <typename... Args>
+    iterator emplace_back_to(iterator const& target, Args&&... args);
+    template <typename... Args>
+    iterator emplace_front(Args&&... args);
+    template <typename... Args>
+    iterator emplace_back(Args&&... args);
     iterator remove_node(iterator const& target);
     iterator remove_node(node_pointer const& target);
     void clear();
 
-    inline iterator begin() const {
-        return iterator{ _head->next };
+    inline iterator begin() const
+    {
+        return iterator { _head->next };
     }
 
-    inline iterator tail() const {
-        return iterator{ _tail };
+    inline iterator tail() const
+    {
+        return iterator { _tail };
     }
 
-    inline iterator end() const {
-        return iterator{ nullptr };
+    inline iterator end() const
+    {
+        return iterator { nullptr };
     }
 
-    inline bool empty() const {
+    inline bool empty() const
+    {
         return _head->next == nullptr;
     }
 
-    inline size_t size() const {
+    inline size_t size() const
+    {
         return _size;
     }
 
 private:
-    template <typename ...Args>
-    static inline void _init_value(node_type* node, Args ...args) {
+    template <typename... Args>
+    static inline void _init_value(node_type* node, Args... args)
+    {
         new (&node->value) value_type(std::forward<Args>(args)...);
     }
 
-    static inline void _free_value(node_type* node) {
+    static inline void _free_value(node_type* node)
+    {
         node->value.~value_type();
     }
 
@@ -828,7 +918,9 @@ private:
 };
 
 template <typename T, typename PoolTy>
-pooling_list<T, PoolTy>::pooling_list(pool_type& pool) : _pool(pool) {
+pooling_list<T, PoolTy>::pooling_list(pool_type& pool)
+    : _pool(pool)
+{
     _tail = _head = _allocate_node();
     _head->prev = nullptr;
     _head->next = nullptr;
@@ -836,66 +928,75 @@ pooling_list<T, PoolTy>::pooling_list(pool_type& pool) : _pool(pool) {
 }
 
 template <typename T, typename PoolTy>
-pooling_list<T, PoolTy>::~pooling_list() noexcept {
+pooling_list<T, PoolTy>::~pooling_list() noexcept
+{
     try {
         clear();
         _deallocate_node(_head);
-    }
-    catch (...) {
+    } catch (...) {
         fprintf(stderr, "Failed to cleanup pooling list!");
         std::abort();
     }
 }
 
 template <typename T, typename PoolTy>
-template <typename ... Args>
+template <typename... Args>
 typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::
-emplace_front_of(iterator const& target, Args&&... args) {
+    emplace_front_of(iterator const& target, Args&&... args)
+{
     return list_impl::emplace_front_of(*this, target, std::forward<Args>(args)...);
 }
 
 template <typename T, typename PoolTy>
-template <typename ... Args>
+template <typename... Args>
 typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::
-emplace_back_to(iterator const& target, Args&&... args) {
+    emplace_back_to(iterator const& target, Args&&... args)
+{
     return list_impl::emplace_back_to(*this, target, std::forward<Args>(args)...);
 }
 
 template <typename T, typename PoolTy>
-template <typename ... Args>
-typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::emplace_front(Args&&... args) {
+template <typename... Args>
+typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::emplace_front(Args&&... args)
+{
     return emplace_back_to(iterator(_head), std::forward<Args>(args)...);
 }
 
 template <typename T, typename PoolTy>
-template <typename ... Args>
-typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::emplace_back(Args&&... args) {
+template <typename... Args>
+typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::emplace_back(Args&&... args)
+{
     return emplace_back_to(iterator(_tail), std::forward<Args>(args)...);
 }
 
 template <typename T, typename PoolTy>
-typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::remove_node(iterator const& target) {
+typename pooling_list<T, PoolTy>::iterator pooling_list<T, PoolTy>::remove_node(iterator const& target)
+{
     return list_impl::remove_node(*this, target);
 }
 
 template <typename T, typename Pool>
-typename pooling_list<T, Pool>::iterator pooling_list<T, Pool>::remove_node(node_pointer const& target) {
-    return list_impl::remove_node(*this, iterator{ target });
+typename pooling_list<T, Pool>::iterator pooling_list<T, Pool>::remove_node(node_pointer const& target)
+{
+    return list_impl::remove_node(*this, iterator { target });
 }
 
 template <typename T, typename PoolTy>
-void pooling_list<T, PoolTy>::clear() {
+void pooling_list<T, PoolTy>::clear()
+{
     while (_head->next != nullptr)
         remove_node(iterator(_head->next));
 }
 
 template <typename T, typename PoolTy>
-typename pooling_list<T, PoolTy>::node_type* pooling_list<T, PoolTy>::_allocate_node() {
+typename pooling_list<T, PoolTy>::node_type* pooling_list<T, PoolTy>::_allocate_node()
+{
     return _pool.allocate();
 }
 
 template <typename T, typename PoolTy>
-void pooling_list<T, PoolTy>::_deallocate_node(node_type* node) {
+void pooling_list<T, PoolTy>::_deallocate_node(node_type* node)
+{
     _pool.deallocate(node);
 }
 
@@ -904,6 +1005,7 @@ void pooling_list<T, PoolTy>::_deallocate_node(node_type* node) {
 template <typename ValueType, unsigned ClusterSize = 256, typename Allocator = std::allocator<ValueType>>
 class private_pooling_list : _noncopyable::noncopyable {
     using node_type = list_impl::list_node<ValueType>;
+
 public:
     using value_type = ValueType;
     using alloc_type = Allocator;
@@ -911,27 +1013,35 @@ public:
     constexpr static unsigned cluster_size = ClusterSize;
     explicit private_pooling_list(size_t pool_reserved = cluster_size, const alloc_type& alloc = alloc_type());
     ~private_pooling_list() noexcept;
-    template <typename ...Args> iterator emplace_front_of(iterator target, Args&& ...args);
-    template <typename ...Args> iterator emplace_back_to(iterator target, Args&& ...args);
-    template <typename ...Args> iterator emplace_front(Args&& ...args);
-    template <typename ...Args> iterator emplace_back(Args&& ...args);
+    template <typename... Args>
+    iterator emplace_front_of(iterator target, Args&&... args);
+    template <typename... Args>
+    iterator emplace_back_to(iterator target, Args&&... args);
+    template <typename... Args>
+    iterator emplace_front(Args&&... args);
+    template <typename... Args>
+    iterator emplace_back(Args&&... args);
     iterator remove_node(iterator target) noexcept;
     void reserve_pool(size_t size);
     void clear();
 
-    inline iterator begin() const {
+    inline iterator begin() const
+    {
         return iterator(_head->next);
     }
 
-    inline iterator tail() const {
+    inline iterator tail() const
+    {
         return iterator(_tail);
     }
 
-    inline iterator end() const {
+    inline iterator end() const
+    {
         return iterator(nullptr);
     }
 
-    inline bool empty() const {
+    inline bool empty() const
+    {
         return _head->next == nullptr;
     }
 
@@ -944,19 +1054,22 @@ private:
     node_type* _allocate_node();
     void _deallocate_node(node_type* node) noexcept;
 
-    template <typename ...Args>
-    static inline void _construct_data(node_type* node, Args ...args) {
+    template <typename... Args>
+    static inline void _construct_data(node_type* node, Args... args)
+    {
         new (&node->value) value_type(std::forward<Args>(args)...);
     }
 
-    static inline void _destruct_data(node_type* node) {
+    static inline void _destruct_data(node_type* node)
+    {
         node->value.~value_type();
     }
 };
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-private_pooling_list<ValueType, ClusterSize, Allocator>::private_pooling_list(size_t pool_reserved, const alloc_type& alloc) :
-    _pool(pool_reserved, alloc) {
+private_pooling_list<ValueType, ClusterSize, Allocator>::private_pooling_list(size_t pool_reserved, const alloc_type& alloc)
+    : _pool(pool_reserved, alloc)
+{
     node_type* head = _allocate_node();
     head->next = nullptr;
     head->prev = nullptr;
@@ -965,64 +1078,74 @@ private_pooling_list<ValueType, ClusterSize, Allocator>::private_pooling_list(si
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-private_pooling_list<ValueType, ClusterSize, Allocator>::~private_pooling_list() noexcept {
+private_pooling_list<ValueType, ClusterSize, Allocator>::~private_pooling_list() noexcept
+{
     clear();
     _deallocate_node(_head);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-template <typename ... Args>
+template <typename... Args>
 typename private_pooling_list<ValueType, ClusterSize, Allocator>::iterator
-private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_front_of(iterator target, Args&&... args) {
+private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_front_of(iterator target, Args&&... args)
+{
     return list_impl::emplace_front_of(*this, target, std::forward<Args>(args)...);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-template <typename ... Args>
+template <typename... Args>
 typename private_pooling_list<ValueType, ClusterSize, Allocator>::iterator
-private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_back_to(iterator target, Args&&... args) {
+private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_back_to(iterator target, Args&&... args)
+{
     return list_impl::emplace_back_to(*this, target, std::forward<Args>(args)...);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-template <typename ... Args>
+template <typename... Args>
 typename private_pooling_list<ValueType, ClusterSize, Allocator>::iterator
-private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_front(Args&&... args) {
+private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_front(Args&&... args)
+{
     return emplace_back_to(iterator(_head), std::forward<Args>(args)...);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-template <typename ... Args>
+template <typename... Args>
 typename private_pooling_list<ValueType, ClusterSize, Allocator>::iterator
-private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_back(Args&&... args) {
+private_pooling_list<ValueType, ClusterSize, Allocator>::emplace_back(Args&&... args)
+{
     return emplace_back_to(iterator(_tail), std::forward<Args>(args)...);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
 typename private_pooling_list<ValueType, ClusterSize, Allocator>::iterator
-private_pooling_list<ValueType, ClusterSize, Allocator>::remove_node(iterator target) noexcept {
+private_pooling_list<ValueType, ClusterSize, Allocator>::remove_node(iterator target) noexcept
+{
     return list_impl::remove_node(*this, target);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-void private_pooling_list<ValueType, ClusterSize, Allocator>::reserve_pool(size_t size) {
+void private_pooling_list<ValueType, ClusterSize, Allocator>::reserve_pool(size_t size)
+{
     _pool.reserve(size);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-void private_pooling_list<ValueType, ClusterSize, Allocator>::clear() {
+void private_pooling_list<ValueType, ClusterSize, Allocator>::clear()
+{
     while (_head->next != nullptr)
         remove_node(iterator(_head->next));
     assert(_size == 0);
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-typename private_pooling_list<ValueType, ClusterSize, Allocator>::node_type* private_pooling_list<ValueType, ClusterSize, Allocator>::_allocate_node() {
+typename private_pooling_list<ValueType, ClusterSize, Allocator>::node_type* private_pooling_list<ValueType, ClusterSize, Allocator>::_allocate_node()
+{
     return _pool.allocate();
 }
 
 template <typename ValueType, unsigned ClusterSize, typename Allocator>
-void private_pooling_list<ValueType, ClusterSize, Allocator>::_deallocate_node(node_type* node) noexcept {
+void private_pooling_list<ValueType, ClusterSize, Allocator>::_deallocate_node(node_type* node) noexcept
+{
     _pool.deallocate(node);
 }
 
@@ -1040,24 +1163,27 @@ public:
     void clear();
     bool reserve(size_t new_capacity);
 
-    bool push(unsigned const value) {
+    bool push(unsigned const value)
+    {
         return push(value != 0);
     }
 
-    bool push(int const value) {
+    bool push(int const value)
+    {
         return push(value != 0);
     }
 
-    size_t size() const {
+    size_t size() const
+    {
         return _top;
     }
 
-    bool empty() const {
+    bool empty() const
+    {
         return _top == 0;
     }
 
 protected:
-
     size_t _cap;
     size_t _top;
     int* _container;
@@ -1077,13 +1203,14 @@ struct buddy_block {
     memrgn_t rgn;
 };
 
-
 struct buddy_system_status {
     uint64_t total_allocated;
     uint64_t total_deallocated;
 };
 
 class buddy_system {
+    //using buddy_block = buddy_block;
+
 public:
     buddy_system();
     ~buddy_system();
@@ -1094,11 +1221,13 @@ public:
     buddy_block* allocate_block(uint64_t size);
     void deallocate_block(buddy_block* blk);
 
-    memrgn_t const& rgn() const {
+    memrgn_t const& rgn() const
+    {
         return _rgn;
     }
 
-    inline uint64_t max_alloc() const {
+    inline uint64_t max_alloc() const
+    {
         return _max_blk_size;
     }
 
@@ -1129,13 +1258,17 @@ protected:
 #ifdef MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
     stack<unsigned> _route_dbg;
 #endif // !MIXX_DEBUG_ENABLE_BUDDY_ROUTE_CORRECTNESS_CHECKING
+    int64_t _total_allocated_size;
 };
 
-class hashed_buddy_system {
+class portable_buddy_system {
 public:
+    portable_buddy_system() = default;
+    portable_buddy_system(memrgn_t const& rgn, unsigned align, unsigned min_cof);
     void init(memrgn_t const& rgn, unsigned align, unsigned min_cof);
     void* allocate(uint64_t size);
     void deallocate(void* p);
+
 protected:
     std::unordered_map<void*, buddy_block*> hashmap;
     buddy_system buddy;
@@ -1143,5 +1276,5 @@ protected:
 
 } // namespace _buddy_impl
 
-using _buddy_impl::buddy_system;
-using _buddy_impl::hashed_buddy_system;
+using _buddy_impl::portable_buddy_system;
+#endif /* C126BD0E_DC93_472C_912E_D1755628B23E */
