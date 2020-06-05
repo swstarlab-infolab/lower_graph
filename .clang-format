@@ -1,0 +1,32 @@
+BasedOnStyle: LLVM
+
+# Codes
+AlignConsecutiveAssignments: true
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: true
+SortUsingDeclarations: true
+MaxEmptyLinesToKeep: 1
+BreakBeforeBraces: Linux
+AlwaysBreakTemplateDeclarations: true
+
+# Function Parameters and Arguments
+#AlignAfterOpenBracket: Align
+BinPackArguments: false
+BinPackParameters: false
+DerivePointerAlignment: false
+PointerAlignment: Middle
+
+# Includes and Defines
+IncludeBlocks: Regroup
+SortIncludes: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
+
+# Indent and Extent
+UseTab: Always
+AccessModifierOffset: -4
+IndentWidth: 4
+TabWidth: 4
+
+ColumnLimit: 100
