@@ -12,6 +12,55 @@
 #include <thread>
 #include <vector>
 
+auto DataManagerInit(Context & ctx, int myID)
+{
+
+	using DataChanType = bchan<Tx>;
+
+	auto & myMem = ctx.dataManagerCtx[myID];
+
+	printf("Start to initialize Device: %d\n", myID);
+	if (myID >= 0) {
+		// GPU Memory
+		cudaSetDevice(myID);
+		size_t freeMem;
+		cudaMemGetInfo(&freeMem, nullptr);
+		freeMem -= (1L << 29);
+		myMem.buf	= allocCUDAByte(freeMem);
+		myMem.buddy = std::make_shared<portable_buddy_system>();
+		myMem.buddy.get()->init(memrgn_t{myMem.buf.get(), freeMem}, 256, 1);
+		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
+		myMem.conn.get()->upstream = -1;
+		for (int32_t i = 0; i < ctx.deviceCount; i++) {
+			if (myID != i) {
+				myMem.conn.get()->neighbor.push_back(i);
+			}
+		}
+
+		myMem.chan	= std::make_shared<bchan<Tx>>(16);
+		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 10); //, KeyHash, KeyEqual);
+		myMem.cacheMtx = std::make_shared<std::mutex>();
+	} else if (myID == -1) {
+		// CPU Memory
+		// size_t freeMem = (1L << 35);
+		size_t freeMem = (1L << 34);
+		myMem.buf	   = allocHostByte(freeMem);
+		myMem.buddy	   = std::make_shared<portable_buddy_system>();
+		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
+		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
+		myMem.conn.get()->upstream = -2;
+		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
+		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 10); //, KeyHash, KeyEqual);
+		myMem.cacheMtx = std::make_shared<std::mutex>();
+	} else {
+		// Storage
+		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
+		myMem.conn.get()->upstream = -2;
+		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
+	}
+	printf("Start to initialize Device: %d, Done\n", myID);
+}
+
 void init(Context & ctx, int argc, char * argv[])
 {
 	// Argument
@@ -25,59 +74,38 @@ void init(Context & ctx, int argc, char * argv[])
 	for (int i = 0; i < 3; i++) {
 		ctx.setting[i] = strtol(argv[i + 2], nullptr, 10);
 	}
-	fprintf(stdout, "\n");
 
 	// get total GPUs
 	cudaGetDeviceCount(&ctx.deviceCount);
 
-	//  0   : CPU
-	//  1~ N: GPU
-	// -1~-N: Storage
-	for (int32_t i = 1; i <= ctx.deviceCount; i++) {
-		typename Context::Connections c;
-		c.upstream = 0;
-		for (int32_t j = 1; j <= ctx.deviceCount; j++) {
-			if (i != j) {
-				c.neighbor.push_back(j);
-			}
-		}
-		ctx.conn[i] = c;
+	// -1     : CPU
+	//  0 ~  N: GPU
+	// -2 ~ -N: Storage
+	for (int32_t i = 0; i < ctx.deviceCount; i++) {
+		DataManagerInit(ctx, i); // GPU
 	}
-
-	// CPU
-	ctx.conn[0] = {-1, {}};
-
-	// SSD
-	ctx.conn[-1] = {-1, {}};
-
-	using DataChanType = bchan<Tx<DataMethod, MemInfo>>;
-	using FileChanType = bchan<Tx<DataMethod, FileInfo>>;
-
-	for (int32_t i = 1; i <= ctx.deviceCount; i++) {
-		ctx.memChan[i] = std::make_shared<DataChanType>(16);
-	}
-	ctx.memChan[0]	 = std::make_shared<DataChanType>(16);
-	ctx.fileChan[-1] = std::make_shared<FileChanType>(16);
+	DataManagerInit(ctx, -1); // CPU
+	DataManagerInit(ctx, -2); // Storage
 }
 
 int main(int argc, char * argv[])
 {
-	using DataTxChan	= bchan<Tx<DataMethod, MemInfo>>;
-	using DataTxChanPtr = std::shared_ptr<DataTxChan>;
+	using DataTxChanPtr = std::shared_ptr<bchan<Tx>>;
 	using ResultChanPtr = std::shared_ptr<bchan<CommandResult>>;
 
 	Context ctx;
 	init(ctx, argc, argv);
 
-	auto					   exeReq = ScheduleManager(ctx);
-	std::vector<DataTxChanPtr> dataChan(ctx.deviceCount);
+	auto exeReq = ScheduleManager(ctx);
+
 	std::vector<ResultChanPtr> resultChan(ctx.deviceCount);
 
 	for (int i = 0; i < ctx.deviceCount; i++) {
-		dataChan[i] = std::make_shared<DataTxChan>(16);
-		DataManager(ctx, i + 1);
-		resultChan[i] = Computation(ctx, i + 1, exeReq);
+		DataManager(ctx, i);
+		resultChan[i] = Computation(ctx, i, exeReq);
 	}
+	DataManager(ctx, -1);
+	DataManager(ctx, -2);
 	auto c = merge(resultChan);
 	ScheduleWaiter(c);
 

@@ -28,10 +28,11 @@ void ComputationGPU(Context &							  ctx,
 					std::shared_ptr<bchan<Command>>		  in,
 					std::shared_ptr<bchan<CommandResult>> out)
 {
-	using DataTx		 = Tx<DataMethod, MemInfo>;
 	using DataTxCallback = bchan<MemInfo>;
 
-	for (auto & req : *in.get()) {
+	size_t hitCount = 0, missCount = 0;
+
+	for (auto & req : *in) {
 		auto start = std::chrono::system_clock::now();
 
 		// PREPARE
@@ -42,29 +43,16 @@ void ComputationGPU(Context &							  ctx,
 				waitGroup[i * 3 + type] = fiber([&, myID, i, type] {
 					auto callback = std::make_shared<DataTxCallback>(2);
 
-					DataTx tx;
-					tx.method = DataMethod::Ready;
+					Tx tx;
+					tx.method = Method::Ready;
 					tx.key	  = {req.gidx[i], (DataType)(type)};
 					tx.cb	  = callback;
 
-					ctx.memChan[myID].get()->push(tx);
+					ctx.dataManagerCtx[myID].chan->push(tx);
 
-					printf("Device%d, Key=<(%d,%d),%d>, Wait Callback: %p\n",
-						   myID,
-						   tx.key.idx[0],
-						   tx.key.idx[1],
-						   tx.key.type,
-						   tx.cb.get());
-
-					for (auto & cbres : *callback.get()) {
+					for (auto & cbres : *callback) {
 						memInfo[i * 3 + type] = cbres;
 					}
-					// callback.get()->pop(memInfo[i * 3 + type]);
-					printf("Device%d, Key=<(%d,%d),%d>, Got Callback\n",
-						   myID,
-						   tx.key.idx[0],
-						   tx.key.idx[1],
-						   tx.key.type);
 				});
 			}
 		}
@@ -75,8 +63,27 @@ void ComputationGPU(Context &							  ctx,
 			}
 		}
 
+		for (auto & i : memInfo) {
+			if (i.hit) {
+				hitCount++;
+			} else {
+				missCount++;
+			}
+		}
+
 		// LAUNCH
 		launchKernel(memInfo);
+
+		printf("I got [%s,%s,%s],[%s,%s,%s],[%s,%s,%s]\n",
+			   memInfo[0].print().c_str(),
+			   memInfo[1].print().c_str(),
+			   memInfo[2].print().c_str(),
+			   memInfo[3].print().c_str(),
+			   memInfo[4].print().c_str(),
+			   memInfo[5].print().c_str(),
+			   memInfo[6].print().c_str(),
+			   memInfo[7].print().c_str(),
+			   memInfo[8].print().c_str());
 
 		auto end = std::chrono::system_clock::now();
 
@@ -86,14 +93,16 @@ void ComputationGPU(Context &							  ctx,
 				waitGroup[i * 3 + type] = fiber([&, myID, i, type] {
 					auto callback = std::make_shared<DataTxCallback>(2);
 
-					DataTx tx;
-					tx.method = DataMethod::Done;
+					Tx tx;
+					tx.method = Method::Done;
 					tx.key	  = {req.gidx[i], (DataType)(type)};
 					tx.cb	  = callback;
 
-					ctx.memChan[myID].get()->push(tx);
+					ctx.dataManagerCtx[myID].chan->push(tx);
 
-					callback.get()->pop(memInfo[i * 3 + type]);
+					for (auto & cbres : *callback) {
+						memInfo[i * 3 + type] = cbres;
+					}
 				});
 			}
 		}
@@ -106,16 +115,21 @@ void ComputationGPU(Context &							  ctx,
 
 		// CALLBACK RESPONSE
 		CommandResult res;
-		res.gidxs		= req.gidx;
+		res.gidx		= req.gidx;
 		res.deviceID	= myID;
-		res.triangles	= 0;
+		res.triangle	= 0;
 		res.elapsedTime = std::chrono::duration<double>(end - start).count();
 
-		out.get()->push(res);
+		out->push(res);
 	}
 
-	ctx.memChan[myID].get()->close();
-	out.get()->close();
+	ctx.dataManagerCtx[myID].chan->close();
+	out->close();
+
+	printf("HIT: %ld, MISS: %ld, HIT/TOTAL: %lf\n",
+		   hitCount,
+		   missCount,
+		   double(hitCount) / double(hitCount + missCount));
 }
 
 auto Computation(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in)
@@ -123,10 +137,12 @@ auto Computation(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in)
 	// auto out = make<bchan<CommandResult>>(1 << 4);
 	auto out = std::make_shared<bchan<CommandResult>>(1 << 4);
 	// prepare channels
-	if (myID > 0) {
-		std::thread([&, myID, in, out] { ComputationGPU(ctx, myID, in, out); }).detach();
-	} else {
+	if (myID < -1) {
+		// No operation
+	} else if (myID == -1) {
 		std::thread([&, myID, in, out] { ComputationCPU(ctx, myID, in, out); }).detach();
+	} else {
+		std::thread([&, myID, in, out] { ComputationGPU(ctx, myID, in, out); }).detach();
 	}
 
 	return out;

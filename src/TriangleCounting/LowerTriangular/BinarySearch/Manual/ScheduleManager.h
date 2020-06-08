@@ -41,15 +41,15 @@ void ScheduleWaiter(std::shared_ptr<bchan<CommandResult>> executionRes)
 		fprintf(stdout,
 				"RESULT: DEV %d (%3d,%3d)(%3d,%3d)(%3d,%3d)=%16lld,%16.6lf(sec)\n",
 				res.deviceID,
-				res.gidxs[0][0],
-				res.gidxs[0][1],
-				res.gidxs[1][0],
-				res.gidxs[1][1],
-				res.gidxs[2][0],
-				res.gidxs[2][1],
-				res.triangles,
+				res.gidx[0][0],
+				res.gidx[0][1],
+				res.gidx[1][0],
+				res.gidx[1][1],
+				res.gidx[2][0],
+				res.gidx[2][1],
+				res.triangle,
 				res.elapsedTime);
-		totalTriangles += res.triangles;
+		totalTriangles += res.triangle;
 		totalElapsedTime += res.elapsedTime;
 	}
 

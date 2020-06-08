@@ -105,6 +105,21 @@ auto allocCUDA(size_t const count)
 		});
 }
 
+auto allocCUDAByte(size_t const byte)
+{
+	return std::shared_ptr<void>(
+		[&] {
+			void * p;
+			cudaMalloc((void **)&p, byte);
+			return p;
+		}(),
+		[](void * p) {
+			if (p != nullptr) {
+				cudaFree(p);
+			}
+		});
+}
+
 template <typename Type>
 auto allocHost(size_t const count)
 {
@@ -115,6 +130,21 @@ auto allocHost(size_t const count)
 			return p;
 		}(),
 		[](Type * p) {
+			if (p != nullptr) {
+				cudaFree(p);
+			}
+		});
+}
+
+auto allocHostByte(size_t const byte)
+{
+	return std::shared_ptr<void>(
+		[&] {
+			void * p;
+			cudaHostAlloc((void **)&p, byte, cudaHostAllocPortable);
+			return p;
+		}(),
+		[](void * p) {
 			if (p != nullptr) {
 				cudaFree(p);
 			}

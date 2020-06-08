@@ -8,6 +8,7 @@ namespace fs = std::experimental::filesystem;
 namespace fs = std::filesystem;
 #endif
 
+#include <BuddySystem/BuddySystem.h>
 #include <GridCSR/GridCSR.h>
 #include <array>
 #include <boost/fiber/all.hpp>
@@ -18,6 +19,7 @@ using Lookup	 = uint32_t;
 using Count		 = unsigned long long;
 using GridIndex	 = std::array<uint32_t, 2>;
 using ThreeGrids = std::array<GridIndex, 3>;
+using DeviceID	 = int32_t;
 
 #define bchan boost::fibers::buffered_channel
 #define uchan boost::fibers::unbuffered_channel
@@ -25,32 +27,46 @@ using ThreeGrids = std::array<GridIndex, 3>;
 
 // Memory Information
 struct MemInfo {
-	void * ptr;
-	size_t byte;
-	bool   ok;
-};
+	void *		ptr;
+	std::string path;
+	size_t		byte;
+	bool		ok;
+	bool		hit;
 
-// File Information
-struct FileInfo {
-	/*
-	struct {
-		std::ifstream row, ptr, col;
-	} path;
-	*/
-	struct {
-		size_t row, ptr, col;
-	} byte;
-	bool ok;
+	std::string print()
+	{
+		char a[24];
+		sprintf(a, "%p", ptr);
+		std::string b(a);
+		return "<" + b + "," + path + "," + std::to_string(byte) + "," + std::to_string(ok) + "," +
+			   std::to_string(hit) + ">";
+	}
 };
 
 enum DataType : uint32_t { Row, Ptr, Col };
 
-// Method For Data
-enum DataMethod : uint32_t { Find, Ready, Done };
-
 struct Key {
 	GridIndex idx;
 	DataType  type;
+
+	std::string print()
+	{
+		std::string result =
+			"<(" + std::to_string(this->idx[0]) + "," + std::to_string(this->idx[1]) + "),";
+		switch (this->type) {
+		case DataType::Row:
+			result += "Row";
+			break;
+		case DataType::Ptr:
+			result += "Ptr";
+			break;
+		case DataType::Col:
+			result += "Col";
+			break;
+		}
+		result += ">";
+		return result;
+	}
 };
 
 struct CacheValue {
@@ -58,17 +74,18 @@ struct CacheValue {
 	int		refCnt;
 };
 
+enum Method : uint32_t { Find, Ready, Done };
+
 // Transaction
-template <typename Method, typename CallbackType>
 struct Tx {
-	Key									 key;
-	Method								 method;
-	std::shared_ptr<bchan<CallbackType>> cb;
+	Key								key;
+	Method							method;
+	std::shared_ptr<bchan<MemInfo>> cb;
 };
 
 struct CommandResult {
-	ThreeGrids gidxs;
-	Count	   triangles;
+	ThreeGrids gidx;
+	Count	   triangle;
 	double	   elapsedTime;
 	int		   deviceID;
 };
@@ -77,42 +94,49 @@ struct Command {
 	ThreeGrids gidx;
 };
 
-/*
-template <typename T>
-struct Request {
-	T data;
+// Types for Cache
+struct KeyHash {
+	std::size_t operator()(Key const & k) const
+	{
+		auto a = std::hash<uint64_t>{}(uint64_t(k.idx[0]) << (8 * sizeof(k.idx[0])));
+		auto b = std::hash<uint64_t>{}(k.idx[1]);
+		auto c = std::hash<uint64_t>{}(k.type);
+		return a ^ b ^ c;
+	}
 };
 
-template <typename T>
-struct Response {
-	T data;
-	bool ok;
+struct KeyEqual {
+	bool operator()(Key const & kl, Key const & kr) const
+	{
+		return (kl.idx[0] == kr.idx[0] && kl.idx[1] == kr.idx[1] && kl.type == kr.type);
+	}
 };
-*/
 
-struct Context {
-	// folder path
-	fs::path folderPath;
+struct DataManagerContext {
 
-	// device count
-	int deviceCount = -1;
-
-	// setting (cudaStreams, cudaBlocks, cudaThreads)
-	std::array<size_t, 3> setting;
-
-	// Grid metadata
-	GridCSR::MetaData meta;
+	using Cache = std::unordered_map<Key, CacheValue, KeyHash, KeyEqual>;
 
 	struct Connections {
-		int32_t				 upstream;
-		std::vector<int32_t> neighbor;
+		DeviceID			  upstream;
+		std::vector<DeviceID> neighbor;
 	};
 
-	// Data Manager's request channel
-	std::unordered_map<int32_t, std::shared_ptr<bchan<Tx<DataMethod, MemInfo>>>>  memChan;
-	std::unordered_map<int32_t, std::shared_ptr<bchan<Tx<DataMethod, FileInfo>>>> fileChan;
+	std::shared_ptr<Cache>		cache;	  // Cache
+	std::shared_ptr<std::mutex> cacheMtx; // Cache Mutex
 
-	// Data Manager's connection request graph
-	std::unordered_map<int32_t, Connections> conn;
+	std::shared_ptr<void>				   buf;	  // Pre-allocated buffer location
+	std::shared_ptr<portable_buddy_system> buddy; // Pre-allocated buffer allocator
+
+	std::shared_ptr<Connections> conn; // Connection to other memory
+	std::shared_ptr<bchan<Tx>>	 chan; // Transaction input channel
+};
+
+struct Context {
+	fs::path			  folderPath;		// folder path
+	int					  deviceCount = -1; // device count
+	std::array<size_t, 3> setting;			// setting (cudaStreams, cudaBlocks, cudaThreads)
+	GridCSR::MetaData	  meta;				// Grid metadata
+
+	std::unordered_map<DeviceID, DataManagerContext> dataManagerCtx;
 };
 #endif /* C26BEB06_5F3E_48D4_AB98_5DE67AD09131 */
