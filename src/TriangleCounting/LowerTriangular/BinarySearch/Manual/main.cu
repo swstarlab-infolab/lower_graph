@@ -1,11 +1,12 @@
 #include "DataManager.cuh"
-#include "ExecutionManager.h"
+#include "ExecutionManager.cuh"
 #include "ScheduleManager.h"
 #include "make.h"
 #include "type.h"
 
 #include <GridCSR/GridCSR.h>
 #include <boost/fiber/all.hpp>
+#include <cub/device/device_scan.cuh>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <stdio.h>
@@ -20,13 +21,13 @@ auto DataManagerInit(Context & ctx, int myID)
 	auto & myMem = ctx.dataManagerCtx[myID];
 
 	printf("Start to initialize Device: %d\n", myID);
-	if (myID >= 0) {
+	if (myID > -1) {
 		// GPU Memory
 		cudaSetDevice(myID);
 		size_t freeMem;
 		cudaMemGetInfo(&freeMem, nullptr);
 		freeMem -= (1L << 29);
-		myMem.buf	= allocCUDAByte(freeMem);
+		myMem.buf	= allocCUDA<void>(freeMem);
 		myMem.buddy = std::make_shared<portable_buddy_system>();
 		myMem.buddy.get()->init(memrgn_t{myMem.buf.get(), freeMem}, 256, 1);
 		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
@@ -44,7 +45,7 @@ auto DataManagerInit(Context & ctx, int myID)
 		// CPU Memory
 		// size_t freeMem = (1L << 35);
 		size_t freeMem = (1L << 34);
-		myMem.buf	   = allocHostByte(freeMem);
+		myMem.buf	   = allocHost<void>(freeMem);
 		myMem.buddy	   = std::make_shared<portable_buddy_system>();
 		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
 		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
@@ -58,7 +59,45 @@ auto DataManagerInit(Context & ctx, int myID)
 		myMem.conn.get()->upstream = -2;
 		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
 	}
-	printf("Start to initialize Device: %d, Done\n", myID);
+}
+
+void ExecutionManagerInit(Context & ctx, int myID)
+{
+	if (myID > -1) {
+		// GPU
+		auto const GridWidth = ctx.meta.info.width.row;
+
+		ExecutionManagerContext myCtx;
+
+		myCtx.lookup.G0.byte = sizeof(Lookup) * GridWidth;
+		cudaSetDevice(myID);
+		myCtx.lookup.G0.ptr	 = allocCUDA<Lookup>(GridWidth);
+		myCtx.lookup.G2.byte = sizeof(Lookup) * GridWidth;
+		cudaSetDevice(myID);
+		myCtx.lookup.G2.ptr	   = allocCUDA<Lookup>(GridWidth);
+		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
+		cudaSetDevice(myID);
+		myCtx.lookup.temp.ptr = allocCUDA<Lookup>(GridWidth);
+
+		cudaSetDevice(myID);
+		cub::DeviceScan::ExclusiveSum(nullptr,
+									  myCtx.cub.byte,
+									  myCtx.lookup.temp.ptr.get(),
+									  myCtx.lookup.G0.ptr.get(),
+									  myCtx.lookup.G0.count());
+		cudaSetDevice(myID);
+		myCtx.cub.ptr = allocCUDA<void>(myCtx.cub.byte);
+
+		myCtx.count.byte = sizeof(Count);
+		cudaSetDevice(myID);
+		myCtx.count.ptr = allocCUDA<Count>(1);
+
+		ctx.executionManagerCtx.insert({myID, myCtx});
+	} else if (myID == -1) {
+		// CPU
+	} else {
+		// noop
+	}
 }
 
 void init(Context & ctx, int argc, char * argv[])
@@ -82,6 +121,7 @@ void init(Context & ctx, int argc, char * argv[])
 	//  0 ~  N: GPU
 	// -2 ~ -N: Storage
 	for (int32_t i = 0; i < ctx.deviceCount; i++) {
+		ExecutionManagerInit(ctx, i);
 		DataManagerInit(ctx, i); // GPU
 	}
 	DataManagerInit(ctx, -1); // CPU
@@ -102,7 +142,7 @@ int main(int argc, char * argv[])
 
 	for (int i = 0; i < ctx.deviceCount; i++) {
 		DataManager(ctx, i);
-		resultChan[i] = Computation(ctx, i, exeReq);
+		resultChan[i] = ExecutionManager(ctx, i, exeReq);
 	}
 	DataManager(ctx, -1);
 	DataManager(ctx, -2);

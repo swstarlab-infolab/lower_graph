@@ -15,11 +15,16 @@ namespace fs = std::filesystem;
 #include <memory>
 #include <unordered_map>
 
+struct MemInfo;
+
+using Vertex	 = uint32_t;
 using Lookup	 = uint32_t;
 using Count		 = unsigned long long;
 using GridIndex	 = std::array<uint32_t, 2>;
 using ThreeGrids = std::array<GridIndex, 3>;
 using DeviceID	 = int32_t;
+using Grid		 = std::array<MemInfo, 3>;
+using Grids		 = std::array<Grid, 3>;
 
 #define bchan boost::fibers::buffered_channel
 #define uchan boost::fibers::unbuffered_channel
@@ -41,6 +46,14 @@ struct MemInfo {
 		return "<" + b + "," + path + "," + std::to_string(byte) + "," + std::to_string(ok) + "," +
 			   std::to_string(hit) + ">";
 	}
+};
+
+template <typename Type>
+struct Memory {
+	std::shared_ptr<Type> ptr;
+	size_t				  byte;
+
+	size_t count() { return this->byte / sizeof(Type); }
 };
 
 enum DataType : uint32_t { Row, Ptr, Col };
@@ -131,12 +144,22 @@ struct DataManagerContext {
 	std::shared_ptr<bchan<Tx>>	 chan; // Transaction input channel
 };
 
+struct ExecutionManagerContext {
+	struct {
+		Memory<Lookup> G0, G2, temp;
+	} lookup;
+
+	Memory<void>  cub;
+	Memory<Count> count;
+};
+
 struct Context {
 	fs::path			  folderPath;		// folder path
 	int					  deviceCount = -1; // device count
 	std::array<size_t, 3> setting;			// setting (cudaStreams, cudaBlocks, cudaThreads)
 	GridCSR::MetaData	  meta;				// Grid metadata
 
-	std::unordered_map<DeviceID, DataManagerContext> dataManagerCtx;
+	std::unordered_map<DeviceID, DataManagerContext>	  dataManagerCtx;
+	std::unordered_map<DeviceID, ExecutionManagerContext> executionManagerCtx;
 };
 #endif /* C26BEB06_5F3E_48D4_AB98_5DE67AD09131 */
