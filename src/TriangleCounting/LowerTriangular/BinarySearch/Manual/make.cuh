@@ -1,7 +1,7 @@
 #ifndef C5E0387C_9D84_4946_BD11_40F8FD59937A
 #define C5E0387C_9D84_4946_BD11_40F8FD59937A
 
-#include "type.h"
+#include "type.cuh"
 
 #include <cuda_runtime.h>
 #include <memory>

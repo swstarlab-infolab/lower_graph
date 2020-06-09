@@ -1,4 +1,4 @@
-#include "make.h"
+#include "make.cuh"
 
 template <>
 std::shared_ptr<void> allocCUDA<void>(size_t const byte)

@@ -15,23 +15,50 @@ namespace fs = std::filesystem;
 #include <memory>
 #include <unordered_map>
 
-struct MemInfo;
-
-using Vertex	 = uint32_t;
-using Lookup	 = uint32_t;
-using Count		 = unsigned long long;
-using GridIndex	 = std::array<uint32_t, 2>;
-using ThreeGrids = std::array<GridIndex, 3>;
-using DeviceID	 = int32_t;
-using Grid		 = std::array<MemInfo, 3>;
-using Grids		 = std::array<Grid, 3>;
-
+// shorten long name
 #define bchan boost::fibers::buffered_channel
 #define uchan boost::fibers::unbuffered_channel
 #define fiber boost::fibers::fiber
 
+// Primitive Types
+using Vertex = uint32_t;
+using Lookup = uint32_t;
+using Count	 = unsigned long long;
+
+// For Buffer Management
+using DeviceID	 = int32_t;
+using GridIndex	 = std::array<uint32_t, 2>;
+using ThreeGrids = std::array<GridIndex, 3>;
+
 // Memory Information
+template <typename Type>
 struct MemInfo {
+	Type *		ptr;
+	std::string path;
+	size_t		byte;
+	bool		ok;
+	bool		hit;
+
+	std::string print()
+	{
+		char a[24]; //
+		sprintf(a, "%p", ptr);
+		std::string b(a);
+		return "<" + b + "," + path + "," + std::to_string(byte) + "," + std::to_string(ok) + "," +
+			   std::to_string(hit) + ">";
+	}
+
+	__host__ __device__ size_t count() const { return this->byte / sizeof(Type); }
+
+	__host__ __device__ Type & operator[](size_t const position) { return this->ptr[position]; }
+	__host__ __device__ Type const & operator[](size_t const position) const
+	{
+		return this->ptr[position];
+	}
+};
+
+template <>
+struct MemInfo<void> {
 	void *		ptr;
 	std::string path;
 	size_t		byte;
@@ -40,7 +67,7 @@ struct MemInfo {
 
 	std::string print()
 	{
-		char a[24];
+		char a[24]; //
 		sprintf(a, "%p", ptr);
 		std::string b(a);
 		return "<" + b + "," + path + "," + std::to_string(byte) + "," + std::to_string(ok) + "," +
@@ -48,21 +75,17 @@ struct MemInfo {
 	}
 };
 
-template <typename Type>
-struct Memory {
-	std::shared_ptr<Type> ptr;
-	size_t				  byte;
+// For algorithm execution
+using Grid	= std::array<MemInfo<Vertex>, 3>;
+using Grids = std::array<Grid, 3>;
 
-	size_t count() { return this->byte / sizeof(Type); }
-};
-
-enum DataType : uint32_t { Row, Ptr, Col };
+enum DataType : uint32_t { Row = 0, Ptr, Col };
 
 struct Key {
 	GridIndex idx;
 	DataType  type;
 
-	std::string print()
+	std::string print() const
 	{
 		std::string result =
 			"<(" + std::to_string(this->idx[0]) + "," + std::to_string(this->idx[1]) + "),";
@@ -83,17 +106,17 @@ struct Key {
 };
 
 struct CacheValue {
-	MemInfo info;
-	int		refCnt;
+	MemInfo<Vertex> info;
+	int				refCnt;
 };
 
 enum Method : uint32_t { Find, Ready, Done };
 
 // Transaction
 struct Tx {
-	Key								key;
-	Method							method;
-	std::shared_ptr<bchan<MemInfo>> cb;
+	Key										key;
+	Method									method;
+	std::shared_ptr<bchan<MemInfo<Vertex>>> cb;
 };
 
 struct CommandResult {
@@ -146,11 +169,11 @@ struct DataManagerContext {
 
 struct ExecutionManagerContext {
 	struct {
-		Memory<Lookup> G0, G2, temp;
+		MemInfo<Lookup> G0, G2, temp;
 	} lookup;
 
-	Memory<void>  cub;
-	Memory<Count> count;
+	MemInfo<void>  cub;
+	MemInfo<Count> count;
 };
 
 struct Context {

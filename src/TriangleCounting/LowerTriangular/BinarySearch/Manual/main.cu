@@ -1,8 +1,8 @@
 #include "DataManager.cuh"
 #include "ExecutionManager.cuh"
-#include "ScheduleManager.h"
-#include "make.h"
-#include "type.h"
+#include "ScheduleManager.cuh"
+#include "make.cuh"
+#include "type.cuh"
 
 #include <GridCSR/GridCSR.h>
 #include <boost/fiber/all.hpp>
@@ -44,7 +44,7 @@ auto DataManagerInit(Context & ctx, int myID)
 	} else if (myID == -1) {
 		// CPU Memory
 		// size_t freeMem = (1L << 35);
-		size_t freeMem = (1L << 34);
+		size_t freeMem = (1L << 33);
 		myMem.buf	   = allocHost<void>(freeMem);
 		myMem.buddy	   = std::make_shared<portable_buddy_system>();
 		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
@@ -67,30 +67,27 @@ void ExecutionManagerInit(Context & ctx, int myID)
 		// GPU
 		auto const GridWidth = ctx.meta.info.width.row;
 
+		auto & myMem = ctx.dataManagerCtx[myID];
+
 		ExecutionManagerContext myCtx;
 
-		myCtx.lookup.G0.byte = sizeof(Lookup) * GridWidth;
 		cudaSetDevice(myID);
-		myCtx.lookup.G0.ptr	 = allocCUDA<Lookup>(GridWidth);
-		myCtx.lookup.G2.byte = sizeof(Lookup) * GridWidth;
-		cudaSetDevice(myID);
-		myCtx.lookup.G2.ptr	   = allocCUDA<Lookup>(GridWidth);
+		myCtx.lookup.G0.byte   = sizeof(Lookup) * GridWidth;
+		myCtx.lookup.G0.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G0.byte);
+		myCtx.lookup.G2.byte   = sizeof(Lookup) * GridWidth;
+		myCtx.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G2.byte);
 		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
-		cudaSetDevice(myID);
-		myCtx.lookup.temp.ptr = allocCUDA<Lookup>(GridWidth);
+		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
 
-		cudaSetDevice(myID);
 		cub::DeviceScan::ExclusiveSum(nullptr,
 									  myCtx.cub.byte,
-									  myCtx.lookup.temp.ptr.get(),
-									  myCtx.lookup.G0.ptr.get(),
+									  myCtx.lookup.temp.ptr,
+									  myCtx.lookup.G0.ptr,
 									  myCtx.lookup.G0.count());
-		cudaSetDevice(myID);
-		myCtx.cub.ptr = allocCUDA<void>(myCtx.cub.byte);
+		myCtx.cub.ptr = myMem.buddy->allocate(myCtx.cub.byte);
 
 		myCtx.count.byte = sizeof(Count);
-		cudaSetDevice(myID);
-		myCtx.count.ptr = allocCUDA<Count>(1);
+		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
 
 		ctx.executionManagerCtx.insert({myID, myCtx});
 	} else if (myID == -1) {
@@ -121,8 +118,8 @@ void init(Context & ctx, int argc, char * argv[])
 	//  0 ~  N: GPU
 	// -2 ~ -N: Storage
 	for (int32_t i = 0; i < ctx.deviceCount; i++) {
-		ExecutionManagerInit(ctx, i);
 		DataManagerInit(ctx, i); // GPU
+		ExecutionManagerInit(ctx, i);
 	}
 	DataManagerInit(ctx, -1); // CPU
 	DataManagerInit(ctx, -2); // Storage
@@ -136,6 +133,8 @@ int main(int argc, char * argv[])
 	Context ctx;
 	init(ctx, argc, argv);
 
+	auto start = std::chrono::system_clock::now();
+
 	auto exeReq = ScheduleManager(ctx);
 
 	std::vector<ResultChanPtr> resultChan(ctx.deviceCount);
@@ -148,6 +147,9 @@ int main(int argc, char * argv[])
 	DataManager(ctx, -2);
 	auto c = merge(resultChan);
 	ScheduleWaiter(c);
+
+	auto end = std::chrono::system_clock::now();
+	std::cout << "REALTIME: " << std::chrono::duration<double>(end - start).count() << std::endl;
 
 	return 0;
 }

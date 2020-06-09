@@ -1,7 +1,6 @@
-#include "ScheduleManager.h"
-
-#include "make.h"
-#include "type.h"
+#include "ScheduleManager.cuh"
+#include "make.cuh"
+#include "type.cuh"
 
 #include <memory>
 #include <thread>
