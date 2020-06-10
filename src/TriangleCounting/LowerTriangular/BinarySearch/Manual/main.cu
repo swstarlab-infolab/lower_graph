@@ -39,19 +39,18 @@ auto DataManagerInit(Context & ctx, int myID)
 		}
 
 		myMem.chan	= std::make_shared<bchan<Tx>>(16);
-		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 10); //, KeyHash, KeyEqual);
+		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
 		myMem.cacheMtx = std::make_shared<std::mutex>();
 	} else if (myID == -1) {
 		// CPU Memory
-		// size_t freeMem = (1L << 35);
-		size_t freeMem = (1L << 33);
+		size_t freeMem = (1L << 35);
 		myMem.buf	   = allocHost<void>(freeMem);
 		myMem.buddy	   = std::make_shared<portable_buddy_system>();
 		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
 		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
 		myMem.conn.get()->upstream = -2;
 		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
-		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 10); //, KeyHash, KeyEqual);
+		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
 		myMem.cacheMtx = std::make_shared<std::mutex>();
 	} else {
 		// Storage
@@ -78,6 +77,11 @@ void ExecutionManagerInit(Context & ctx, int myID)
 		myCtx.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G2.byte);
 		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
 		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
+
+		cudaSetDevice(myID);
+		cudaMemset(myCtx.lookup.temp.ptr, 0, myCtx.lookup.temp.byte);
+		cudaMemset(myCtx.lookup.G0.ptr, 0, myCtx.lookup.G0.byte);
+		cudaMemset(myCtx.lookup.G2.ptr, 0, myCtx.lookup.G2.byte);
 
 		cub::DeviceScan::ExclusiveSum(nullptr,
 									  myCtx.cub.byte,

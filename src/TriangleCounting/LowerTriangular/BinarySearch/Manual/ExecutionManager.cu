@@ -128,9 +128,6 @@ static Count launchKernel(Context & ctx, DeviceID myID, Grids & G)
 	// cudaStream_t stream;
 
 	cudaSetDevice(myID);
-	cudaMemset(myCtx.lookup.temp.ptr, 0, myCtx.lookup.temp.byte);
-	cudaMemset(myCtx.lookup.G0.ptr, 0, myCtx.lookup.G0.byte);
-	cudaMemset(myCtx.lookup.G2.ptr, 0, myCtx.lookup.G2.byte);
 	cudaMemset(myCtx.count.ptr, 0, myCtx.count.byte);
 
 	// cudaStreamCreate(&stream);
