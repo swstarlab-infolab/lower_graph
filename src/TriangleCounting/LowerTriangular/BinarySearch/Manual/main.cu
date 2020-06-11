@@ -23,10 +23,11 @@ auto DataManagerInit(Context & ctx, int myID)
 	printf("Start to initialize Device: %d\n", myID);
 	if (myID > -1) {
 		// GPU Memory
-		cudaSetDevice(myID);
 		size_t freeMem;
+		cudaSetDevice(myID);
 		cudaMemGetInfo(&freeMem, nullptr);
 		freeMem -= (1L << 29);
+		cudaSetDevice(myID);
 		myMem.buf	= allocCUDA<void>(freeMem);
 		myMem.buddy = std::make_shared<portable_buddy_system>();
 		myMem.buddy.get()->init(memrgn_t{myMem.buf.get(), freeMem}, 256, 1);

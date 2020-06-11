@@ -11,6 +11,7 @@ namespace fs = std::filesystem;
 #include <BuddySystem/BuddySystem.h>
 #include <GridCSR/GridCSR.h>
 #include <array>
+#include <atomic>
 #include <boost/fiber/all.hpp>
 #include <memory>
 #include <unordered_map>
