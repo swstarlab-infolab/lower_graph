@@ -150,7 +150,6 @@ struct KeyEqual {
 };
 
 struct DataManagerContext {
-
 	using Cache = std::unordered_map<Key, CacheValue, KeyHash, KeyEqual>;
 
 	struct Connections {

@@ -5,15 +5,15 @@
 #include "type.cuh"
 
 #include <GridCSR/GridCSR.h>
-#include <boost/fiber/all.hpp>
 #include <cub/device/device_scan.cuh>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <stdio.h>
+#include <string.h>
 #include <thread>
 #include <vector>
 
-auto DataManagerInit(Context & ctx, int myID)
+static void DataManagerInit(Context & ctx, int myID)
 {
 
 	using DataChanType = bchan<Tx>;
@@ -44,7 +44,7 @@ auto DataManagerInit(Context & ctx, int myID)
 		myMem.cacheMtx = std::make_shared<std::mutex>();
 	} else if (myID == -1) {
 		// CPU Memory
-		size_t freeMem = (1L << 35);
+		size_t freeMem = (1L << 37); // 128GB
 		myMem.buf	   = allocHost<void>(freeMem);
 		myMem.buddy	   = std::make_shared<portable_buddy_system>();
 		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
@@ -61,7 +61,7 @@ auto DataManagerInit(Context & ctx, int myID)
 	}
 }
 
-void ExecutionManagerInit(Context & ctx, int myID)
+static void ExecutionManagerInit(Context & ctx, int myID)
 {
 	if (myID > -1) {
 		// GPU
@@ -97,12 +97,30 @@ void ExecutionManagerInit(Context & ctx, int myID)
 		ctx.executionManagerCtx.insert({myID, myCtx});
 	} else if (myID == -1) {
 		// CPU
-	} else {
-		// noop
+		auto const GridWidth = ctx.meta.info.width.row;
+
+		auto & myMem = ctx.dataManagerCtx[myID];
+
+		ExecutionManagerContext myCtx;
+		myCtx.lookup.G0.byte   = sizeof(Lookup) * GridWidth;
+		myCtx.lookup.G0.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G0.byte);
+		myCtx.lookup.G2.byte   = sizeof(Lookup) * GridWidth;
+		myCtx.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G2.byte);
+		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
+		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
+
+		memset(myCtx.lookup.temp.ptr, 0, myCtx.lookup.temp.byte);
+		memset(myCtx.lookup.G0.ptr, 0, myCtx.lookup.G0.byte);
+		memset(myCtx.lookup.G2.ptr, 0, myCtx.lookup.G2.byte);
+
+		myCtx.count.byte = sizeof(Count);
+		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
+
+		ctx.executionManagerCtx.insert({myID, myCtx});
 	}
 }
 
-void init(Context & ctx, int argc, char * argv[])
+static void init(Context & ctx, int argc, char * argv[])
 {
 	// Argument
 	if (argc != 5) {

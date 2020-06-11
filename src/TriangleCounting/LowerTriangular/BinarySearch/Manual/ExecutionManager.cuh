@@ -5,6 +5,9 @@
 
 #include <memory>
 
+Count launchKernelGPU(Context & ctx, DeviceID myID, Grids & G);
+// Count launchKernelCPU(Context & ctx, DeviceID myID, Grids & G);
+
 std::shared_ptr<bchan<CommandResult>>
 ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in);
 

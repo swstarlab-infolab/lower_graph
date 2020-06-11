@@ -306,7 +306,7 @@ void DataManager(Context & ctx, DeviceID myID)
 			for (auto & tx : *ctx.dataManagerCtx[myID].chan) {
 				switch (tx.method) {
 				case Method::Find:
-					std::thread([&, myID, tx] {
+					fiber([&, myID, tx] {
 						MemInfo<Vertex> myInfo = {
 							0,
 						};
@@ -318,7 +318,7 @@ void DataManager(Context & ctx, DeviceID myID)
 					}).detach();
 					break;
 				case Method::Ready:
-					std::thread([&, myID, tx] {
+					fiber([&, myID, tx] {
 						MemInfo<Vertex> myInfo = {
 							0,
 						};
@@ -333,7 +333,7 @@ void DataManager(Context & ctx, DeviceID myID)
 					}).detach();
 					break;
 				case Method::Done:
-					std::thread([&, myID, tx] {
+					fiber([&, myID, tx] {
 						MemInfo<Vertex> myInfo = {
 							0,
 						};
