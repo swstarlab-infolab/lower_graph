@@ -8,12 +8,11 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/TriangleCounting-LowerTriangular-BinarySearch-Manual",
+            "program": "${workspaceFolder}/build/NewConverterCPP",
             "args": [
-                "/mnt/nvme/GCSR/RMAT25-24",
-                "1",
-                "1",
-                "32"
+                "/mnt/nvme/Adj6/RMAT10",
+                "/mnt/nvme/TEST",
+                "TEST"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
