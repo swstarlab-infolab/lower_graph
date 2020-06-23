@@ -81,7 +81,8 @@
         "__bit_reference": "cpp",
         "stack": "cpp",
         "hash_map": "cpp",
-        "hash_set": "cpp"
+        "hash_set": "cpp",
+        "__config": "cpp"
     },
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
     "C_Cpp.autocomplete": "Default",

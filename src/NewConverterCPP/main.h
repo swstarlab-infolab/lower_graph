@@ -9,10 +9,10 @@ namespace fs = std::experimental::filesystem;
 namespace fs = std::filesystem;
 #endif
 
-#include "wg.h"
-
 #include <array>
-#include <boost/fiber/all.hpp>
+//#include <boost/fiber/all.hpp>
+#include <boost/fiber/buffered_channel.hpp>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -21,20 +21,21 @@ namespace fs = std::filesystem;
 
 // shorten long name
 #define bchan boost::fibers::buffered_channel
-#define uchan boost::fibers::unbuffered_channel
-#define fiber boost::fibers::fiber
+//#define uchan boost::fibers::unbuffered_channel
+//#define fiber boost::fibers::fiber
 
-#define WORDSZ 6 // do not adjust!!!
+#define __WordByteLength 6 // do not adjust!!!
 
-#define GWIDTH (1 << 24)
+#define __GridWidth (1 << 24)
 
 // Tweaking
-#define CHANSZ		   16
-#define UNORDEREDMAPSZ 1024
-#define WORKERSZ	   4
-#define MAPPERSZ	   16
-#define TEMPFILEEXT	   ".el32"
-std::array<std::string, 3> OUTFILEEXT = {".row", ".ptr", ".col"};
+#define __ChannelSize		16
+#define __UnorderedMapSize	1024
+#define __WorkerCount		16
+#define __MapperCount		16
+#define __FilenameDelimiter "-"
+#define __TempFileExt		".el32"
+constexpr char const * __OutFileExts[] = {".row", ".ptr", ".col"};
 
 // Primitive Types
 using FileList		  = std::vector<fs::path>;
@@ -80,5 +81,28 @@ struct SplittedRawData {
 	size_t	  cnt;
 	uint8_t * dst;
 };
+
+template <typename T>
+auto load(fs::path inFile)
+{
+	std::ifstream f(inFile, std::ios::binary);
+
+	auto fbyte = fs::file_size(inFile);
+	auto out   = std::make_shared<std::vector<T>>(fbyte / sizeof(T));
+
+	f.read((char *)(out->data()), fbyte);
+	f.close();
+
+	return out;
+}
+
+std::string filename(GridIndex32 in);
+
+std::shared_ptr<FileList> walk(fs::path const & inFolder, std::string const & ext);
+void					  log(std::string const & str);
+
+void phase1(Context const & ctx);
+void phase2(Context const & ctx);
+void phase3(Context const & ctx);
 
 #endif /* C095FE4C_6D1F_4B64_B717_F7FDBDAF95F7 */
