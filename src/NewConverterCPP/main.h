@@ -34,6 +34,7 @@ namespace fs = std::filesystem;
 #define WORKERSZ	   4
 #define MAPPERSZ	   16
 #define TEMPFILEEXT	   ".el32"
+std::array<std::string, 3> OUTFILEEXT = {".row", ".ptr", ".col"};
 
 // Primitive Types
 using FileList		  = std::vector<fs::path>;

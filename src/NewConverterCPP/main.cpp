@@ -3,6 +3,7 @@
 #include <GridCSR/GridCSR.h>
 #include <atomic>
 #include <fstream>
+#include <chrono>
 #include <iostream>
 #include <mutex>
 #include <tbb/blocked_range.h>
@@ -448,169 +449,201 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 
 void writeCSR(Context const & ctx, fs::path tempFilePath, std::shared_ptr<EdgeList32> in)
 {
-	std::vector<Vertex32> outRow;
-	std::vector<Vertex32> outPtr;
-	std::vector<Vertex32> outCol(in->size());
+	std::vector<std::vector<Vertex32>> out(3);
 
-	// fill
-	std::vector<std::atomic<uint32_t>> bitvec(size_t(ceil(double(in->size()) / 32.0)));
+	auto fillCol = std::thread([&, in] {
+		// fill col
+		out[2].resize(in->size());
 
-	auto getBit = [&bitvec](size_t const i) {
-		return bool(bitvec[i / 32].load() & (1 << (i % 32)));
-	};
-	auto setBit = [&bitvec](size_t const i) { bitvec[i / 32].fetch_or(1 << (i % 32)); };
+		tbb::parallel_for(
+			tbb::blocked_range<size_t>(0, in->size()),
+			[&](tbb::blocked_range<size_t> const & r) {
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto i = grain + offset;
 
-	std::vector<uint64_t> pSumRes(in->size() + 1);
-
-	// prepare bit array
-	tbb::parallel_for(
-		tbb::blocked_range<size_t>(0, bitvec.size()),
-		[&](tbb::blocked_range<size_t> const & r) {
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto i = grain + offset;
-
-					bitvec[i] = 0;
-				}
-			}
-		},
-		tbb::auto_partitioner());
-
-	// prepare exclusive sum array
-	tbb::parallel_for(
-		tbb::blocked_range<size_t>(0, pSumRes.size()),
-		[&](tbb::blocked_range<size_t> const & r) {
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto i = grain + offset;
-
-					pSumRes[i] = 0;
-				}
-			}
-		},
-		tbb::auto_partitioner());
-
-	// set bit 1 which is left != right (not the case: left == right)
-	tbb::parallel_for(
-		tbb::blocked_range<size_t>(1, in->size()),
-		[&](tbb::blocked_range<size_t> const & r) {
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto prev = grain + offset - 1;
-					auto curr = grain + offset;
-					if (in->at(prev)[0] != in->at(curr)[0]) {
-						setBit(curr);
+						out[2][i] = in->at(i)[1];
 					}
 				}
-			}
-		},
-		tbb::auto_partitioner());
-	setBit(0);
+			},
+			tbb::auto_partitioner());
+	});
 
-	// exclusive sum
-	tbb::parallel_scan(
-		tbb::blocked_range<size_t>(0, in->size()),
-		0,
-		[&](tbb::blocked_range<size_t> const & r, uint64_t sum, bool isFinalScan) {
-			auto temp = sum;
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto i = grain + offset;
-					temp += (getBit(i) ? 1 : 0);
-					if (isFinalScan) {
-						pSumRes[i + 1] = temp;
+	auto fillRowAndPtr = std::thread([&, in] {
+		// fill
+		std::vector<std::atomic<uint32_t>> bitvec(size_t(ceil(double(in->size()) / 32.0)));
+
+		auto getBit = [&bitvec](size_t const i) {
+			return bool(bitvec[i / 32].load() & (1 << (i % 32)));
+		};
+		auto setBit = [&bitvec](size_t const i) { bitvec[i / 32].fetch_or(1 << (i % 32)); };
+
+		std::vector<uint64_t> pSumRes(in->size() + 1);
+
+		// prepare bit array
+		tbb::parallel_for(
+			tbb::blocked_range<size_t>(0, bitvec.size()),
+			[&](tbb::blocked_range<size_t> const & r) {
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto i = grain + offset;
+
+						bitvec[i] = 0;
 					}
 				}
-			}
-			return temp;
-		},
-		[&](size_t const & l, size_t const & r) { return l + r; },
-		tbb::auto_partitioner());
+			},
+			tbb::auto_partitioner());
 
-	// count bit using parallel reduce
-	size_t ones = tbb::parallel_reduce(
-		tbb::blocked_range<size_t>(0, 32 * bitvec.size()),
-		0,
-		[&](tbb::blocked_range<size_t> const & r, size_t sum) {
-			auto temp = sum;
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto i = grain + offset;
-					temp += (getBit(i) ? 1 : 0);
-				}
-			}
-			return temp;
-		},
-		[&](size_t const & l, size_t const & r) { return l + r; },
-		tbb::auto_partitioner());
+		// prepare exclusive sum array
+		tbb::parallel_for(
+			tbb::blocked_range<size_t>(0, pSumRes.size()),
+			[&](tbb::blocked_range<size_t> const & r) {
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto i = grain + offset;
 
-	outRow.resize(ones);
-	outPtr.resize(ones + 1);
-
-	// fill row
-	tbb::parallel_for(
-		tbb::blocked_range<size_t>(0, in->size()),
-		[&](tbb::blocked_range<size_t> const & r) {
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto i = grain + offset;
-
-					if (getBit(i)) {
-						outRow[pSumRes[i]] = in->at(i)[0];
+						pSumRes[i] = 0;
 					}
 				}
-			}
-		},
-		tbb::auto_partitioner());
+			},
+			tbb::auto_partitioner());
 
-	// fill ptr
-	tbb::parallel_for(
-		tbb::blocked_range<size_t>(0, in->size()),
-		[&](tbb::blocked_range<size_t> const & r) {
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto i = grain + offset;
-
-					if (getBit(i)) {
-						outPtr[pSumRes[i]] = i;
+		// set bit 1 which is left != right (not the case: left == right)
+		tbb::parallel_for(
+			tbb::blocked_range<size_t>(1, in->size()),
+			[&](tbb::blocked_range<size_t> const & r) {
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto prev = grain + offset - 1;
+						auto curr = grain + offset;
+						if (in->at(prev)[0] != in->at(curr)[0]) {
+							setBit(curr);
+						}
 					}
 				}
-			}
-		},
-		tbb::auto_partitioner());
-	outPtr.back() = in->size();
+			},
+			tbb::auto_partitioner());
+		setBit(0);
 
-	// fill col
-	tbb::parallel_for(
-		tbb::blocked_range<size_t>(0, in->size()),
-		[&](tbb::blocked_range<size_t> const & r) {
-			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
-				for (size_t offset = 0; offset < r.grainsize(); offset++) {
-					auto i = grain + offset;
-
-					outCol[i] = in->at(i)[1];
+		// exclusive sum
+		tbb::parallel_scan(
+			tbb::blocked_range<size_t>(0, in->size()),
+			0,
+			[&](tbb::blocked_range<size_t> const & r, uint64_t sum, bool isFinalScan) {
+				auto temp = sum;
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto i = grain + offset;
+						temp += (getBit(i) ? 1 : 0);
+						if (isFinalScan) {
+							pSumRes[i + 1] = temp;
+						}
+					}
 				}
-			}
-		},
-		tbb::auto_partitioner());
+				return temp;
+			},
+			[&](size_t const & l, size_t const & r) { return l + r; },
+			tbb::auto_partitioner());
 
+		// count bit using parallel reduce
+		size_t ones = tbb::parallel_reduce(
+			tbb::blocked_range<size_t>(0, 32 * bitvec.size()),
+			0,
+			[&](tbb::blocked_range<size_t> const & r, size_t sum) {
+				auto temp = sum;
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto i = grain + offset;
+						temp += (getBit(i) ? 1 : 0);
+					}
+				}
+				return temp;
+			},
+			[&](size_t const & l, size_t const & r) { return l + r; },
+			tbb::auto_partitioner());
+
+		out[0].resize(ones);
+		out[1].resize(ones + 1);
+
+		// fill row
+		tbb::parallel_for(
+			tbb::blocked_range<size_t>(0, in->size()),
+			[&](tbb::blocked_range<size_t> const & r) {
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto i = grain + offset;
+
+						if (getBit(i)) {
+							out[0][pSumRes[i]] = in->at(i)[0];
+						}
+					}
+				}
+			},
+			tbb::auto_partitioner());
+
+		// fill ptr
+		tbb::parallel_for(
+			tbb::blocked_range<size_t>(0, in->size()),
+			[&](tbb::blocked_range<size_t> const & r) {
+				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+					for (size_t offset = 0; offset < r.grainsize(); offset++) {
+						auto i = grain + offset;
+
+						if (getBit(i)) {
+							out[1][pSumRes[i]] = i;
+						}
+					}
+				}
+			},
+			tbb::auto_partitioner());
+		out[1].back() = in->size();
+	});
+
+	if (fillCol.joinable()) {
+		fillCol.join();
+	}
+
+	if (fillRowAndPtr.joinable()) {
+		fillRowAndPtr.join();
+	}
 	/*
-		printf("ROW ");
-		for (auto & i : outRow) {
-			printf("%d ", i);
+	printf("ROW ");
+	for (auto & i : out[0]) {
+		printf("%d ", i);
+	}
+	printf("\n");
+	printf("PTR ");
+	for (auto & i : out[1]) {
+		printf("%d ", i);
+	}
+	printf("\n");
+	printf("COL ");
+	for (auto & i : out[2]) {
+		printf("%d ", i);
+	}
+	printf("\n");
+	*/
+
+	std::vector<std::thread> writeThreads(3);
+	for (size_t i = 0; i < writeThreads.size(); i++) {
+		writeThreads[i] = std::thread([&, i] {
+			auto outFile = (ctx.outFolder / ctx.outName) /
+						   fs::path(tempFilePath.stem().string() + OUTFILEEXT[i]);
+
+			std::ofstream f(outFile, std::ios::binary | std::ios::out);
+
+			f.write((char *)(out[i].data()), out[i].size() * sizeof(Vertex32));
+			f.close();
+		});
+	}
+
+	for (auto & t : writeThreads) {
+		if (t.joinable()) {
+			t.join();
 		}
-		printf("\n");
-		printf("PTR ");
-		for (auto & i : outPtr) {
-			printf("%d ", i);
-		}
-		printf("\n");
-		printf("COL ");
-		for (auto & i : outCol) {
-			printf("%d ", i);
-		}
-		printf("\n");
-		*/
+	}
+
+	fs::remove(tempFilePath);
 }
 
 void phase2(Context const & ctx)
@@ -621,6 +654,10 @@ void phase2(Context const & ctx)
 			printf("FILE: %s\n", fpath.string().c_str());
 		}
 		auto rawData = load<Edge32>(fpath);
+		{
+			std::lock_guard<std::mutex> lg(logmtx);
+			printf("FILE: %s loadCompleted\n", fpath.string().c_str());
+		}
 		auto deduped = dedup(rawData);
 		/*
 		for (auto & e : *deduped) {
@@ -680,9 +717,15 @@ int main(int argc, char * argv[])
 	Context ctx;
 	init(ctx, argc, argv);
 
+	auto start = std::chrono::system_clock::now();
 	phase1(ctx);
 	phase2(ctx);
 	phase3(ctx);
+	auto end = std::chrono::system_clock::now();
+
+	std::chrono::duration<double> elapsed = end - start;
+
+	printf("ElapsedTime: %lf (sec)\n", elapsed.count());
 
 	return 0;
 }
