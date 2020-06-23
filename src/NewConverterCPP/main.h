@@ -31,8 +31,8 @@ namespace fs = std::filesystem;
 // Tweaking
 #define CHANSZ		   16
 #define UNORDEREDMAPSZ 1024
-#define WORKERSZ	   1
-#define MAPPERSZ	   1
+#define WORKERSZ	   4
+#define MAPPERSZ	   16
 #define TEMPFILEEXT	   ".el32"
 
 // Primitive Types

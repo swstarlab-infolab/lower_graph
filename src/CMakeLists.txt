@@ -1,6 +1,6 @@
 set(CMAKE_CXX_COMPILER ${CXX})
-#set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
-set(CMAKE_CXX_FLAGS "-Wall -Og -std=c++17 -g0")
+set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
+#set(CMAKE_CXX_FLAGS "-Wall -Og -std=c++17 -g0")
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/include

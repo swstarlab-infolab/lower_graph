@@ -6,13 +6,26 @@
 #include <mutex>
 #include <tuple>
 
+std::mutex logmtx;
+
 std::string filename(GridIndex32 in) { return std::to_string(in[0]) + "-" + std::to_string(in[1]); }
 
 uint64_t convBE6toLE8(uint8_t * in)
 {
+	uint64_t temp = 0;
+	temp |= in[0];
+
+	for (int i = 1; i <= 5; i++) {
+		temp <<= 8;
+		temp |= in[i];
+	}
+
+	return temp;
+	/*
 	return (uint64_t(in[0]) << (8 * 5)) + (uint64_t(in[1]) << (8 * 4)) +
 		   (uint64_t(in[2]) << (8 * 3)) + (uint64_t(in[3]) << (8 * 2)) +
 		   (uint64_t(in[4]) << (8 * 1)) + (uint64_t(in[5]) << (8 * 0));
+		   */
 }
 
 auto walk(fs::path const & inFolder, std::string const & ext)
@@ -37,6 +50,7 @@ auto load(fs::path inFile)
 	auto out   = std::make_shared<RawData>(fbyte);
 
 	f.read((char *)(out->data()), fbyte);
+	f.close();
 
 	return out;
 }
@@ -46,15 +60,26 @@ auto split(std::shared_ptr<RawData> in)
 	auto out = std::make_shared<bchan<SplittedRawData>>(CHANSZ);
 	std::thread([=] {
 		for (size_t i = 0; i < in->size();) {
-			auto src = convBE6toLE8(&in->at(i));
+			auto src = convBE6toLE8(&(in->at(i)));
 			i += WORDSZ;
-			auto cnt = convBE6toLE8(&in->at(i));
+			auto cnt = convBE6toLE8(&(in->at(i)));
 			i += WORDSZ;
 
 			SplittedRawData sRawData;
 			sRawData.src = src;
 			sRawData.cnt = cnt;
 			sRawData.dst = &(in->at(i));
+
+			/*
+						{
+							std::lock_guard<std::mutex> lg(logmtx);
+							printf("SPLIT %ld[%ld] -> ", src, cnt);
+							for (size_t j = 0; j < cnt; j++) {
+								printf("%ld ", convBE6toLE8(&(in->at(i + j * WORDSZ))));
+							}
+							printf("\n");
+						}
+						*/
 
 			out->push(sRawData);
 			i += WORDSZ * cnt;
@@ -69,12 +94,14 @@ auto map(std::shared_ptr<bchan<SplittedRawData>> in)
 	auto out = std::make_shared<bchan<std::shared_ptr<GridAndEdgeList>>>(CHANSZ);
 	std::thread([=] {
 		for (auto & listb : *in) {
-			auto   el		= std::make_shared<GridAndEdgeList>(listb.cnt);
+
+			auto el = std::make_shared<GridAndEdgeList>(listb.cnt);
+
 			size_t selfloop = 0;
 
 			for (size_t i = 0; i < listb.cnt; i++) {
 				auto s = listb.src;
-				auto d = convBE6toLE8(&listb.dst[i * WORDSZ]);
+				auto d = convBE6toLE8(&(listb.dst[i * WORDSZ]));
 
 				if (s < d) {
 					std::swap(s, d);
@@ -83,24 +110,36 @@ auto map(std::shared_ptr<bchan<SplittedRawData>> in)
 					continue;
 				}
 
-				el->at(i - selfloop).first =
-					GridIndex32{uint32_t(s / GWIDTH), uint32_t(d / GWIDTH)};
-				el->at(i - selfloop).second = Edge32{uint32_t(s % GWIDTH), uint32_t(d % GWIDTH)};
+				auto & target = el->at(i - selfloop);
+				target.first  = GridIndex32{uint32_t(s / GWIDTH), uint32_t(d / GWIDTH)};
+				target.second = Edge32{uint32_t(s % GWIDTH), uint32_t(d % GWIDTH)};
 
-				printf("<(%2d,%2d),(%2d,%2d)>o\n",
-					   el->at(i - selfloop).first[0],
-					   el->at(i - selfloop).first[1],
-					   el->at(i - selfloop).second[0],
-					   el->at(i - selfloop).second[1]);
+				/*
+								{
+									std::lock_guard<std::mutex> lg(logmtx);
+									printf("map intermediate <(%d,%d),(%d,%d)>\n",
+										   target2.first[0],
+										   target2.first[1],
+										   target2.second[0],
+										   target2.second[1]);
+								}
+								*/
 			}
-
-			// 도대체 뭐가 문제야 ?!?!?!??!
 
 			el->resize(el->size() - selfloop);
 
-			for (auto & e : *el) {
-				printf("<(%2d,%2d),(%2d,%2d)>\n", e.first[0], e.first[1], e.second[1], e.second[2]);
-			}
+			/*
+						for (size_t i = 0; i < el->size(); i++) {
+							{
+								std::lock_guard<std::mutex> lg(logmtx);
+								printf("map result <(%d,%d),(%d,%d)>\n",
+									   el2.at(i).first[0],
+									   el2.at(i).first[1],
+									   el2.at(i).second[1],
+									   el2.at(i).second[2]);
+							}
+						}
+						*/
 
 			out->push(el);
 		}
@@ -110,12 +149,12 @@ auto map(std::shared_ptr<bchan<SplittedRawData>> in)
 	return out;
 }
 
-void writer(Context const & ctx,
-			GridIndex32		gidx32,
-			WriterEntry &	writerEntry,
-			bchan<bool> &	writeDone)
+void writer(Context const &				 ctx,
+			GridIndex32					 gidx32,
+			std::shared_ptr<WriterEntry> writerEntry,
+			std::shared_ptr<bchan<bool>> writeDone)
 {
-	auto & myChan = writerEntry[gidx32];
+	auto & myChan = writerEntry->at(gidx32);
 
 	auto outFolder = ctx.outFolder / ctx.outName;
 	if (!fs::exists(outFolder)) {
@@ -129,21 +168,31 @@ void writer(Context const & ctx,
 	for (auto & el : *myChan) {
 		out.write((char *)(el->data()), el->size() * sizeof(Edge32));
 	}
-
 	out.close();
 
-	writeDone.push(true);
+	/*
+		for (auto & el : *myChan) {
+			for (auto & e : *el) {
+				{
+					std::lock_guard<std::mutex> lg(logmtx);
+					printf("WRITER (%d,%d)\n", e[0], e[1]);
+				}
+			}
+		}
+		*/
+
+	writeDone->push(true);
 }
 
 void shuffle(Context const &										  ctx,
 			 std::shared_ptr<bchan<std::shared_ptr<GridAndEdgeList>>> in,
-			 bchan<bool> &											  shuffleDone,
-			 bchan<bool> &											  writeDone,
-			 WriterEntry &											  writerEntry,
+			 std::shared_ptr<bchan<bool>>							  shuffleDone,
+			 std::shared_ptr<bchan<bool>>							  writeDone,
+			 std::shared_ptr<WriterEntry>							  writerEntry,
 			 std::mutex &											  writerEntryMutex,
 			 std::atomic<uint32_t> &								  writerCnt)
 {
-	std::thread([&, in] {
+	std::thread([=, &ctx, &writerEntryMutex, &writerCnt] {
 		// something
 		using TempEntry =
 			std::unordered_map<GridIndex32, std::shared_ptr<EdgeList32>, KeyHash, KeyEqual>;
@@ -156,11 +205,25 @@ void shuffle(Context const &										  ctx,
 				temp[gnel.first]->push_back(gnel.second);
 			}
 
+			/*
+						{
+							std::lock_guard<std::mutex> lg(logmtx);
+							printf("shuffle sorted\n");
+							for (auto & kv : temp) {
+								printf("<(%d,%d),{", kv.first[0], kv.first[1]);
+								for (auto & e : *kv.second) {
+									printf("(%d,%d) ", e[1], e[2]);
+								}
+								printf("}>\n");
+							}
+						}
+						*/
+
 			for (auto & kv : temp) {
 				std::unique_lock<std::mutex> ul(writerEntryMutex);
 
-				if (writerEntry.find(kv.first) == writerEntry.end()) {
-					writerEntry.insert_or_assign(
+				if (writerEntry->find(kv.first) == writerEntry->end()) {
+					writerEntry->insert_or_assign(
 						kv.first, std::make_shared<bchan<std::shared_ptr<EdgeList32>>>(CHANSZ));
 					writerCnt.fetch_add(1);
 					std::thread(
@@ -169,22 +232,27 @@ void shuffle(Context const &										  ctx,
 				}
 				ul.unlock();
 
-				writerEntry[kv.first]->push(kv.second);
+				writerEntry->at(kv.first)->push(kv.second);
 			}
 		}
 
-		shuffleDone.push(true);
+		shuffleDone->push(true);
 	}).detach();
 }
 
 void phase1(Context const & ctx)
 {
 	auto fn = [&](fs::path fpath) {
-		bchan<bool>			  shuffleDone(CHANSZ);
-		bchan<bool>			  writeDone(CHANSZ);
-		WriterEntry			  writerEntry(UNORDEREDMAPSZ);
+		{
+			std::lock_guard<std::mutex> lg(logmtx);
+			printf("FILE: %s\n", fpath.string().c_str());
+		}
+		auto shuffleDone = std::make_shared<bchan<bool>>(CHANSZ);
+		auto writeDone	 = std::make_shared<bchan<bool>>(CHANSZ);
+		auto writerEntry = std::make_shared<WriterEntry>(UNORDEREDMAPSZ);
+
 		std::mutex			  writerEntryMutex;
-		std::atomic<uint32_t> writerCnt;
+		std::atomic<uint32_t> writerCnt = 0;
 
 		auto rawData		 = load(fpath);
 		auto splittedRawData = split(rawData);
@@ -197,16 +265,28 @@ void phase1(Context const & ctx)
 
 		for (size_t i = 0; i < mapper.size(); i++) {
 			bool temp;
-			shuffleDone.pop(temp);
+			shuffleDone->pop(temp);
+			/*
+			{
+				std::lock_guard<std::mutex> lg(logmtx);
+				printf("fn: shuffle done: %d\n", i);
+			}
+			*/
 		}
 
-		for (auto & kv : writerEntry) {
+		for (auto & kv : *writerEntry) {
 			kv.second->close();
 		}
 
 		for (size_t i = 0; i < writerCnt.load(); i++) {
 			bool temp;
-			writeDone.pop(temp);
+			writeDone->pop(temp);
+			/*
+			{
+				std::lock_guard<std::mutex> lg(logmtx);
+				printf("fn: write done: %d\n", i);
+			}
+			*/
 		}
 	};
 
@@ -278,6 +358,7 @@ int main(int argc, char * argv[])
 	init(ctx, argc, argv);
 
 	phase1(ctx);
+	phase2();
 
 	return 0;
 }
