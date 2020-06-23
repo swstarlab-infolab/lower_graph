@@ -66,9 +66,9 @@ auto split(std::shared_ptr<RawData> in)
 	auto out = std::make_shared<bchan<SplittedRawData>>(CHANSZ);
 	std::thread([=] {
 		for (size_t i = 0; i < in->size();) {
-			auto src = convBE6toLE8(&(in->at(i)));
+			size_t src = convBE6toLE8(&(in->at(i)));
 			i += WORDSZ;
-			auto cnt = convBE6toLE8(&(in->at(i)));
+			size_t cnt = convBE6toLE8(&(in->at(i)));
 			i += WORDSZ;
 
 			SplittedRawData sRawData;
@@ -177,15 +177,15 @@ void writer(Context const &				 ctx,
 	out.close();
 
 	/*
-		for (auto & el : *myChan) {
-			for (auto & e : *el) {
-				{
-					std::lock_guard<std::mutex> lg(logmtx);
-					printf("WRITER (%d,%d)\n", e[0], e[1]);
-				}
+	for (auto & el : *myChan) {
+		for (auto & e : *el) {
+			{
+				std::lock_guard<std::mutex> lg(logmtx);
+				printf("WRITER (%d,%d)\n", e[0], e[1]);
 			}
 		}
-		*/
+	}
+	*/
 
 	writeDone->push(true);
 }
@@ -212,18 +212,18 @@ void shuffle(Context const &										  ctx,
 			}
 
 			/*
-						{
-							std::lock_guard<std::mutex> lg(logmtx);
-							printf("shuffle sorted\n");
-							for (auto & kv : temp) {
-								printf("<(%d,%d),{", kv.first[0], kv.first[1]);
-								for (auto & e : *kv.second) {
-									printf("(%d,%d) ", e[1], e[2]);
-								}
-								printf("}>\n");
-							}
-						}
-						*/
+			{
+				std::lock_guard<std::mutex> lg(logmtx);
+				printf("shuffle sorted\n");
+				for (auto & kv : temp) {
+					printf("<(%d,%d),{", kv.first[0], kv.first[1]);
+					for (auto & e : *kv.second) {
+						printf("(%d,%d) ", e[1], e[2]);
+					}
+					printf("}>\n");
+				}
+			}
+			*/
 
 			for (auto & kv : temp) {
 				std::unique_lock<std::mutex> ul(writerEntryMutex);
@@ -232,9 +232,7 @@ void shuffle(Context const &										  ctx,
 					writerEntry->insert_or_assign(
 						kv.first, std::make_shared<bchan<std::shared_ptr<EdgeList32>>>(CHANSZ));
 					writerCnt.fetch_add(1);
-					std::thread(
-						writer, std::ref(ctx), kv.first, std::ref(writerEntry), std::ref(writeDone))
-						.detach();
+					std::thread(writer, std::ref(ctx), kv.first, writerEntry, writeDone).detach();
 				}
 				ul.unlock();
 
@@ -367,19 +365,24 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 		},
 		tbb::auto_partitioner());
 
+	/*
 	for (auto & e : *in) {
 		printf("IN (%d,%d)\n", e[0], e[1]);
 	}
+	*/
 
 	// sort
 	tbb::parallel_sort(in->begin(), in->end(), [&](Edge32 const & l, Edge32 const & r) {
 		return (l[0] < r[0]) || ((l[0] == r[0]) && (l[1] < r[1]));
 	});
 
+	/*
 	for (auto & e : *in) {
 		printf("SORT (%d,%d)\n", e[0], e[1]);
 	}
+	*/
 
+	/*
 	printf("BIT:");
 	for (size_t i = 0; i < 32 * bitvec.size(); i++) {
 		printf("%d", getBit(i) ? 1 : 0);
@@ -388,6 +391,8 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 		}
 	}
 	printf("\n");
+	*/
+
 	// set bit 1 which is left != right (not the case: left == right)
 	tbb::parallel_for(
 		tbb::blocked_range<size_t>(0, in->size()),
@@ -408,6 +413,7 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 		},
 		tbb::auto_partitioner());
 
+	/*
 	printf("BIT:");
 	for (size_t i = 0; i < 32 * bitvec.size(); i++) {
 		printf("%d", getBit(i) ? 1 : 0);
@@ -416,6 +422,7 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 		}
 	}
 	printf("\n");
+	*/
 
 	// exclusive sum
 	tbb::parallel_scan(
@@ -437,13 +444,15 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 		[&](size_t const & l, size_t const & r) { return l + r; },
 		tbb::auto_partitioner());
 
+	/*
 	for (auto & e : pSumRes) {
 		printf("pSUM %ld\n", e);
 	}
+	*/
 
 	// count bit using parallel reduce
-	auto ones = tbb::parallel_reduce(
-		tbb::blocked_range<size_t>(0, bitvec.size()),
+	size_t ones = tbb::parallel_reduce(
+		tbb::blocked_range<size_t>(0, 32 * bitvec.size()),
 		0,
 		[&](tbb::blocked_range<size_t> const & r, size_t sum) {
 			auto temp = sum;
@@ -458,7 +467,9 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 		[&](size_t const & l, size_t const & r) { return l + r; },
 		tbb::auto_partitioner());
 
-	printf("ones:%ld", ones);
+	/*
+	printf("ones: %ld\n", ones);
+	*/
 
 	out->resize(ones);
 
@@ -479,7 +490,7 @@ auto dedup(std::shared_ptr<EdgeList32> in)
 	return out;
 }
 
-void writeCSR()
+void writeCSR(std::shared_ptr<Edge32> in)
 {
 	// CSR file write
 }
@@ -493,10 +504,13 @@ void phase2(Context const & ctx)
 		}
 		auto rawData = load<Edge32>(fpath);
 		auto deduped = dedup(rawData);
-
+		writeCSR(deduped);
+		/*
 		for (auto & e : *deduped) {
-			printf("(%d,%d)\n", e[0], e[1]);
+			printf("(%d,%d) ", e[0], e[1]);
 		}
+		printf("\n");
+		*/
 	};
 
 	auto jobs = [&] {

@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/NewConverterCPP",
             "args": [
-                "/mnt/nvme/Adj6/RMAT10",
+                "/mnt/nvme/Adj6/RMAT16",
                 "/mnt/nvme/TEST",
                 "TEST"
             ],
