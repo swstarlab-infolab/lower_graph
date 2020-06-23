@@ -127,9 +127,9 @@ static void shuffle(Context const &											 ctx,
 						kv.first,
 						std::make_shared<bchan<std::shared_ptr<EdgeList32>>>(__ChannelSize));
 					writerCnt.fetch_add(1);
-					std::thread(
-						writer, std::ref(ctx), kv.first, std::ref(writerEntry), std::ref(writeDone))
-						.detach();
+					// log("SHUFFLE fork thread for " + std::to_string(kv.first[0]) + "-" +
+					// std::to_string(kv.first[1]));
+					fiber([&, kv] { writer(ctx, kv.first, writerEntry, writeDone); }).detach();
 				}
 				ul.unlock();
 

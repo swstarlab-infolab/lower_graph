@@ -10,8 +10,7 @@ namespace fs = std::filesystem;
 #endif
 
 #include <array>
-//#include <boost/fiber/all.hpp>
-#include <boost/fiber/buffered_channel.hpp>
+#include <boost/fiber/all.hpp>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -21,8 +20,8 @@ namespace fs = std::filesystem;
 
 // shorten long name
 #define bchan boost::fibers::buffered_channel
-//#define uchan boost::fibers::unbuffered_channel
-//#define fiber boost::fibers::fiber
+#define uchan boost::fibers::unbuffered_channel
+#define fiber boost::fibers::fiber
 
 #define __WordByteLength 6 // do not adjust!!!
 
