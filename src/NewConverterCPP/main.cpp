@@ -2,8 +2,8 @@
 
 #include <GridCSR/GridCSR.h>
 #include <atomic>
-#include <fstream>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <tbb/blocked_range.h>
@@ -157,12 +157,12 @@ auto map(std::shared_ptr<bchan<SplittedRawData>> in)
 	return out;
 }
 
-void writer(Context const &				 ctx,
-			GridIndex32					 gidx32,
-			std::shared_ptr<WriterEntry> writerEntry,
-			std::shared_ptr<bchan<bool>> writeDone)
+void writer(Context const & ctx,
+			GridIndex32		gidx32,
+			WriterEntry &	writerEntry,
+			bchan<bool> &	writeDone)
 {
-	auto & myChan = writerEntry->at(gidx32);
+	auto & myChan = writerEntry.at(gidx32);
 
 	auto outFolder = ctx.outFolder / ctx.outName;
 	if (!fs::exists(outFolder)) {
@@ -189,18 +189,18 @@ void writer(Context const &				 ctx,
 	}
 	*/
 
-	writeDone->push(true);
+	writeDone.push(true);
 }
 
 void shuffle(Context const &										  ctx,
 			 std::shared_ptr<bchan<std::shared_ptr<GridAndEdgeList>>> in,
-			 std::shared_ptr<bchan<bool>>							  shuffleDone,
-			 std::shared_ptr<bchan<bool>>							  writeDone,
-			 std::shared_ptr<WriterEntry>							  writerEntry,
+			 bchan<bool> &											  shuffleDone,
+			 bchan<bool> &											  writeDone,
+			 WriterEntry &											  writerEntry,
 			 std::mutex &											  writerEntryMutex,
 			 std::atomic<uint32_t> &								  writerCnt)
 {
-	std::thread([=, &ctx, &writerEntryMutex, &writerCnt] {
+	std::thread([&, in] {
 		// something
 		using TempEntry =
 			std::unordered_map<GridIndex32, std::shared_ptr<EdgeList32>, KeyHash, KeyEqual>;
@@ -230,19 +230,21 @@ void shuffle(Context const &										  ctx,
 			for (auto & kv : temp) {
 				std::unique_lock<std::mutex> ul(writerEntryMutex);
 
-				if (writerEntry->find(kv.first) == writerEntry->end()) {
-					writerEntry->insert_or_assign(
+				if (writerEntry.find(kv.first) == writerEntry.end()) {
+					writerEntry.insert_or_assign(
 						kv.first, std::make_shared<bchan<std::shared_ptr<EdgeList32>>>(CHANSZ));
 					writerCnt.fetch_add(1);
-					std::thread(writer, std::ref(ctx), kv.first, writerEntry, writeDone).detach();
+					std::thread(
+						writer, std::ref(ctx), kv.first, std::ref(writerEntry), std::ref(writeDone))
+						.detach();
 				}
 				ul.unlock();
 
-				writerEntry->at(kv.first)->push(kv.second);
+				writerEntry.at(kv.first)->push(kv.second);
 			}
 		}
 
-		shuffleDone->push(true);
+		shuffleDone.push(true);
 	}).detach();
 }
 
@@ -250,12 +252,15 @@ void phase1(Context const & ctx)
 {
 	auto fn = [&](fs::path fpath) {
 		{
-			std::lock_guard<std::mutex> lg(logmtx);
+			// std::lock_guard<std::mutex> lg(logmtx);
 			printf("FILE: %s\n", fpath.string().c_str());
 		}
-		auto shuffleDone = std::make_shared<bchan<bool>>(CHANSZ);
-		auto writeDone	 = std::make_shared<bchan<bool>>(CHANSZ);
-		auto writerEntry = std::make_shared<WriterEntry>(UNORDEREDMAPSZ);
+		bchan<bool> shuffleDone(CHANSZ);
+		bchan<bool> writeDone(CHANSZ);
+		// auto shuffleDone = std::make_shared<bchan<bool>>(CHANSZ);
+		// auto writeDone	 = std::make_shared<bchan<bool>>(CHANSZ);
+		// auto writerEntry = std::make_shared<WriterEntry>(UNORDEREDMAPSZ);
+		WriterEntry writerEntry(UNORDEREDMAPSZ);
 
 		std::mutex			  writerEntryMutex;
 		std::atomic<uint32_t> writerCnt = 0;
@@ -271,7 +276,7 @@ void phase1(Context const & ctx)
 
 		for (size_t i = 0; i < mapper.size(); i++) {
 			bool temp;
-			shuffleDone->pop(temp);
+			shuffleDone.pop(temp);
 			/*
 			{
 				std::lock_guard<std::mutex> lg(logmtx);
@@ -280,13 +285,13 @@ void phase1(Context const & ctx)
 			*/
 		}
 
-		for (auto & kv : *writerEntry) {
+		for (auto & kv : writerEntry) {
 			kv.second->close();
 		}
 
 		for (size_t i = 0; i < writerCnt.load(); i++) {
 			bool temp;
-			writeDone->pop(temp);
+			writeDone.pop(temp);
 			/*
 			{
 				std::lock_guard<std::mutex> lg(logmtx);
@@ -650,14 +655,16 @@ void phase2(Context const & ctx)
 {
 	auto fn = [&](fs::path fpath) {
 		{
-			std::lock_guard<std::mutex> lg(logmtx);
+			// std::lock_guard<std::mutex> lg(logmtx);
 			printf("FILE: %s\n", fpath.string().c_str());
 		}
 		auto rawData = load<Edge32>(fpath);
+		/*
 		{
 			std::lock_guard<std::mutex> lg(logmtx);
 			printf("FILE: %s loadCompleted\n", fpath.string().c_str());
 		}
+		*/
 		auto deduped = dedup(rawData);
 		/*
 		for (auto & e : *deduped) {
