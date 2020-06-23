@@ -30,8 +30,8 @@ namespace fs = std::filesystem;
 // Tweaking
 #define __ChannelSize		16
 #define __UnorderedMapSize	1024
-#define __WorkerCount		16
-#define __MapperCount		16
+#define __WorkerCount		32
+#define __MapperCount		8
 #define __FilenameDelimiter "-"
 #define __TempFileExt		".el32"
 constexpr char const * __OutFileExts[] = {".row", ".ptr", ".col"};
