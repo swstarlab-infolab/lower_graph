@@ -4,6 +4,11 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
+#include <tbb/parallel_scan.h>
+#include <tbb/parallel_sort.h>
 #include <tuple>
 
 std::mutex logmtx;
@@ -42,12 +47,13 @@ auto walk(fs::path const & inFolder, std::string const & ext)
 	return out;
 }
 
+template <typename T>
 auto load(fs::path inFile)
 {
 	std::ifstream f(inFile, std::ios::binary);
 
 	auto fbyte = fs::file_size(inFile);
-	auto out   = std::make_shared<RawData>(fbyte);
+	auto out   = std::make_shared<std::vector<T>>(fbyte / sizeof(T));
 
 	f.read((char *)(out->data()), fbyte);
 	f.close();
@@ -254,7 +260,7 @@ void phase1(Context const & ctx)
 		std::mutex			  writerEntryMutex;
 		std::atomic<uint32_t> writerCnt = 0;
 
-		auto rawData		 = load(fpath);
+		auto rawData		 = load<uint8_t>(fpath);
 		auto splittedRawData = split(rawData);
 
 		std::vector<decltype(map(splittedRawData))> mapper(MAPPERSZ);
@@ -290,7 +296,7 @@ void phase1(Context const & ctx)
 		}
 	};
 
-	auto jobs = [&ctx] {
+	auto jobs = [&] {
 		auto out = std::make_shared<bchan<fs::path>>(CHANSZ);
 		std::thread([&ctx, out] {
 			auto fileList = walk(ctx.inFolder, "");
@@ -319,15 +325,158 @@ void phase1(Context const & ctx)
 	}
 }
 
-void dedup()
+auto dedup(std::shared_ptr<EdgeList32> in)
 {
-	// sort
+	// init
+	auto out = std::make_shared<EdgeList32>(in->size());
+
+	std::vector<std::atomic<uint32_t>> bitvec(size_t(ceil(double(in->size()) / 32.0)));
+
+	auto getBit = [&bitvec](size_t const i) {
+		return bool(bitvec[i / 32].load() & (1 << (i % 32)));
+	};
+	auto setBit = [&bitvec](size_t const i) { bitvec[i / 32].fetch_or(1 << (i % 32)); };
+
+	std::vector<uint64_t> pSumRes(in->size() + 1);
+
 	// prepare bit array
+	tbb::parallel_for(
+		tbb::blocked_range<size_t>(0, bitvec.size()),
+		[&](tbb::blocked_range<size_t> const & r) {
+			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+				for (size_t offset = 0; offset < r.grainsize(); offset++) {
+					auto i = grain + offset;
+
+					bitvec[i] = 0;
+				}
+			}
+		},
+		tbb::auto_partitioner());
+
 	// prepare exclusive sum array
+	tbb::parallel_for(
+		tbb::blocked_range<size_t>(0, pSumRes.size()),
+		[&](tbb::blocked_range<size_t> const & r) {
+			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+				for (size_t offset = 0; offset < r.grainsize(); offset++) {
+					auto i = grain + offset;
+
+					pSumRes[i] = 0;
+				}
+			}
+		},
+		tbb::auto_partitioner());
+
+	for (auto & e : *in) {
+		printf("IN (%d,%d)\n", e[0], e[1]);
+	}
+
+	// sort
+	tbb::parallel_sort(in->begin(), in->end(), [&](Edge32 const & l, Edge32 const & r) {
+		return (l[0] < r[0]) || ((l[0] == r[0]) && (l[1] < r[1]));
+	});
+
+	for (auto & e : *in) {
+		printf("SORT (%d,%d)\n", e[0], e[1]);
+	}
+
+	printf("BIT:");
+	for (size_t i = 0; i < 32 * bitvec.size(); i++) {
+		printf("%d", getBit(i) ? 1 : 0);
+		if (i % 32 == 32 - 1) {
+			printf(" ");
+		}
+	}
+	printf("\n");
 	// set bit 1 which is left != right (not the case: left == right)
+	tbb::parallel_for(
+		tbb::blocked_range<size_t>(0, in->size()),
+		[&](tbb::blocked_range<size_t> const & r) {
+			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+				for (size_t offset = 0; offset < r.grainsize(); offset++) {
+					auto curr = grain + offset;
+					auto next = grain + offset + 1;
+					if (next < in->size()) {
+						if (in->at(curr) != in->at(next)) {
+							setBit(curr);
+						}
+					} else if (next == in->size()) {
+						setBit(curr);
+					}
+				}
+			}
+		},
+		tbb::auto_partitioner());
+
+	printf("BIT:");
+	for (size_t i = 0; i < 32 * bitvec.size(); i++) {
+		printf("%d", getBit(i) ? 1 : 0);
+		if (i % 32 == 32 - 1) {
+			printf(" ");
+		}
+	}
+	printf("\n");
+
 	// exclusive sum
+	tbb::parallel_scan(
+		tbb::blocked_range<size_t>(0, in->size()),
+		0,
+		[&](tbb::blocked_range<size_t> const & r, uint64_t sum, bool isFinalScan) {
+			auto temp = sum;
+			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+				for (size_t offset = 0; offset < r.grainsize(); offset++) {
+					auto i = grain + offset;
+					temp += (getBit(i) ? 1 : 0);
+					if (isFinalScan) {
+						pSumRes[i + 1] = temp;
+					}
+				}
+			}
+			return temp;
+		},
+		[&](size_t const & l, size_t const & r) { return l + r; },
+		tbb::auto_partitioner());
+
+	for (auto & e : pSumRes) {
+		printf("pSUM %ld\n", e);
+	}
+
 	// count bit using parallel reduce
+	auto ones = tbb::parallel_reduce(
+		tbb::blocked_range<size_t>(0, bitvec.size()),
+		0,
+		[&](tbb::blocked_range<size_t> const & r, size_t sum) {
+			auto temp = sum;
+			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+				for (size_t offset = 0; offset < r.grainsize(); offset++) {
+					auto i = grain + offset;
+					temp += (getBit(i) ? 1 : 0);
+				}
+			}
+			return temp;
+		},
+		[&](size_t const & l, size_t const & r) { return l + r; },
+		tbb::auto_partitioner());
+
+	printf("ones:%ld", ones);
+
+	out->resize(ones);
+
 	// reduce out vector
+	tbb::parallel_for(
+		tbb::blocked_range<size_t>(0, in->size()),
+		[&](tbb::blocked_range<size_t> const & r) {
+			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
+				for (size_t offset = 0; offset < r.grainsize(); offset++) {
+					auto i = grain + offset;
+
+					out->at(pSumRes[i]) = in->at(i);
+				}
+			}
+		},
+		tbb::auto_partitioner());
+
+	return out;
 }
 
 void writeCSR()
@@ -335,15 +484,54 @@ void writeCSR()
 	// CSR file write
 }
 
-void phase2()
+void phase2(Context const & ctx)
 {
-	// phase 2
+	auto fn = [&](fs::path fpath) {
+		{
+			std::lock_guard<std::mutex> lg(logmtx);
+			printf("FILE: %s\n", fpath.string().c_str());
+		}
+		auto rawData = load<Edge32>(fpath);
+		auto deduped = dedup(rawData);
+
+		for (auto & e : *deduped) {
+			printf("(%d,%d)\n", e[0], e[1]);
+		}
+	};
+
+	auto jobs = [&] {
+		auto out = std::make_shared<bchan<fs::path>>(CHANSZ);
+		std::thread([&ctx, out] {
+			auto fileList = walk(ctx.outFolder, TEMPFILEEXT);
+			for (auto & f : *fileList) {
+				out->push(f);
+			}
+			out->close();
+		}).detach();
+		return out;
+	}();
+
+	std::vector<std::thread> threads(WORKERSZ);
+
+	for (auto & t : threads) {
+		t = std::thread([&ctx, jobs, fn] {
+			for (auto & path : *jobs) {
+				fn(path);
+			}
+		});
+	}
+
+	for (auto & t : threads) {
+		if (t.joinable()) {
+			t.join();
+		}
+	}
 }
 
 void init(Context & ctx, int argc, char * argv[])
 {
 	if (argc != 4) {
-		fprintf(stderr, "usage: %s <inFolder> <outFolder> <outName>\n", argv[0]);
+		fprintf(stderr, "Usage: %s <inFolder> <outFolder> <outName>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
@@ -358,7 +546,7 @@ int main(int argc, char * argv[])
 	init(ctx, argc, argv);
 
 	phase1(ctx);
-	phase2();
+	phase2(ctx);
 
 	return 0;
 }
