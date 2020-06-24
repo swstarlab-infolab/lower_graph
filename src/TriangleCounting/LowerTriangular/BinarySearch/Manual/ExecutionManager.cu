@@ -62,7 +62,7 @@ static void Execution(Context &								ctx,
 
 		Count myTriangle = 0;
 		// LAUNCH
-		if (myID > 0) {
+		if (myID > -1) {
 			myTriangle = launchKernelGPU(ctx, myID, memInfo);
 		} else {
 			// myTriangle = launchKernelCPU(ctx, myID, memInfo);
