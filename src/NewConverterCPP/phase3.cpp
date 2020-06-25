@@ -17,8 +17,6 @@ void phase3(Context const & ctx)
 {
 	auto metaDataPath = ctx.outFolder / ctx.outName / fs::path("meta.json");
 
-	log("Metadata: " + metaDataPath.string() + " Start");
-
 	GridCSR::MetaData m;
 
 	m.dataname		= ctx.outName;
@@ -55,5 +53,5 @@ void phase3(Context const & ctx)
 
 	m.Save(metaDataPath);
 
-	log("Metadata: " + metaDataPath.string() + " Finished");
+	log("Phase 3 (Json Metadata) " + metaDataPath.string() + " Written");
 }

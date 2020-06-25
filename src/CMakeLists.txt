@@ -15,5 +15,6 @@ link_directories(
 add_subdirectory(BuddySystem)
 add_subdirectory(Converter)
 add_subdirectory(NewConverterCPP)
+add_subdirectory(NewConverterGo)
 add_subdirectory(GridCSR)
 add_subdirectory(TriangleCounting)

@@ -316,11 +316,10 @@ static void writeCSR(Context const & ctx, fs::path tempFilePath, std::shared_ptr
 void phase2(Context const & ctx)
 {
 	auto fn = [&](fs::path fpath) {
-		log("EdgeList->CSR: " + fpath.string() + " Start");
 		auto rawData = load<Edge32>(fpath);
 		auto deduped = dedup(rawData);
 		writeCSR(ctx, fpath, deduped);
-		log("EdgeList->CSR: " + fpath.string() + " Finished");
+		log("Phase 2 (EdgeList->CSR) " + fpath.string() + " Converted");
 	};
 
 	auto jobs = [&] {

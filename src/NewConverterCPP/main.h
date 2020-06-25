@@ -70,7 +70,7 @@ using WriterEntry = std::unordered_map<GridIndex32,
 									   KeyEqual>;
 
 struct Context {
-	fs::path	inFolder;
+	//fs::path	inFolder;
 	fs::path	outFolder;
 	std::string outName;
 };

@@ -33,4 +33,4 @@ static std::string currentTimeAndDate()
 	return ss.str();
 }
 
-void log(std::string const & s) { printf("[%s] %s\n", currentTimeAndDate().c_str(), s.c_str()); }
+void log(std::string const & s) { printf("%s %s\n", currentTimeAndDate().c_str(), s.c_str()); }
