@@ -1,1 +1,1 @@
-./build/NewConverterGo -in.folder $1 -out.folder $2 -out.name $3 && ./build/NewConverterCPP $2 $3
+./build/NewConverterGo -in.folder $1 -out.folder $2 -out.name $3 && ./build/NewConverterCPP $1 $2 $3

@@ -4,7 +4,22 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
+	"unsafe"
 )
+
+func filenameEncode(gidx gidx32, ext string) string {
+	return strconv.Itoa(int(gidx[0])) + "-" + strconv.Itoa(int(gidx[1])) + ext
+}
+
+func edge32SliceToByteSlice(in []edge32) []byte {
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&in))
+	header.Len = len(in) * 8
+	header.Cap = len(in) * 8
+
+	return *(*[]byte)(unsafe.Pointer(&header))
+}
 
 func convBE6toLE8(in []uint8) uint64 {
 	var temp uint64 = 0
@@ -63,7 +78,7 @@ func loader(path string) []uint8 {
 }
 
 func splitter(adj6 []uint8) <-chan sRawDat {
-	out := make(chan sRawDat, 16)
+	out := make(chan sRawDat, 128)
 	go func() {
 		defer close(out)
 		for i := uint64(0); i < uint64(len(adj6)); {

@@ -28,10 +28,10 @@ namespace fs = std::filesystem;
 #define __GridWidth (1 << 24)
 
 // Tweaking
-#define __ChannelSize		16
+#define __ChannelSize		128
 #define __UnorderedMapSize	1024
-#define __WorkerCount		32
-#define __MapperCount		8
+#define __WorkerCount		16
+#define __MapperCount		64
 #define __FilenameDelimiter "-"
 #define __TempFileExt		".el32"
 constexpr char const * __OutFileExts[] = {".row", ".ptr", ".col"};
@@ -70,7 +70,7 @@ using WriterEntry = std::unordered_map<GridIndex32,
 									   KeyEqual>;
 
 struct Context {
-	//fs::path	inFolder;
+	fs::path	inFolder;
 	fs::path	outFolder;
 	std::string outName;
 };

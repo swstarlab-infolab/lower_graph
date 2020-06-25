@@ -26,27 +26,30 @@ func init() {
 }
 
 func main() {
-	var inputInfo information
-	{
-		log.Println("Phase 0 (Adj6 Scan)", "Start")
-		start := time.Now()
-		inputInfo = phase0()
-		elapsed := time.Since(start).Seconds()
-		log.Println("Phase 0 (Adj6 Scan)", "Complete, Elapsed Time:", elapsed, "(sec)")
-	}
+	/*
+		var inputInfo information
+		{
+			log.Println("Phase 0 (Adj6 Scan)", "Start")
+			start := time.Now()
+			inputInfo = phase0()
+			elapsed := time.Since(start).Seconds()
+			log.Println("Phase 0 (Adj6 Scan)", "Complete, Elapsed Time:", elapsed, "(sec)")
+		}
 
-	log.Println("Phase 0 Result")
-	log.Println("    MinVID          :", inputInfo.minvid)
-	log.Println("    MaxVID          :", inputInfo.maxvid)
-	log.Println("    MaxVID - MinVID :", inputInfo.maxvid-inputInfo.minvid)
-	log.Println("    Edges           :", inputInfo.edges)
-	log.Println("    Selfloops       :", inputInfo.selfloops)
-	log.Println("    Edges-Selfloops :", inputInfo.edges-inputInfo.selfloops)
+		log.Println("Phase 0 Result")
+		log.Println("    MinVID          :", inputInfo.minvid)
+		log.Println("    MaxVID          :", inputInfo.maxvid)
+		log.Println("    MaxVID - MinVID :", inputInfo.maxvid-inputInfo.minvid)
+		log.Println("    Edges           :", inputInfo.edges)
+		log.Println("    Selfloops       :", inputInfo.selfloops)
+		log.Println("    Edges-Selfloops :", inputInfo.edges-inputInfo.selfloops)
+	*/
 
 	{
 		log.Println("Phase 1 (Adj6->Edgelist) Start")
 		start := time.Now()
-		phase1(inputInfo)
+		phase1()
+		//phase1(inputInfo)
 		elapsed := time.Since(start).Seconds()
 		log.Println("Phase 1 (Adj6->Edgelist) Complete, Elapsed Time:", elapsed, "(sec)")
 	}

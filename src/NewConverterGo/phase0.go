@@ -115,7 +115,7 @@ func routine0(in <-chan string) <-chan information {
 			data := loader(file)
 			splitPos := splitter(data)
 
-			workers := 256
+			workers := 192
 
 			mapped := make([]<-chan information, workers)
 			for i := range mapped {
@@ -132,7 +132,7 @@ func routine0(in <-chan string) <-chan information {
 func phase0() information {
 	files := walk()
 
-	result := make([]<-chan information, 4)
+	result := make([]<-chan information, 32)
 
 	for i := range result {
 		result[i] = routine0(files)

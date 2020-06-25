@@ -1,4 +1,3 @@
-/*
 #include "main.h"
 
 #include <atomic>
@@ -77,35 +76,9 @@ static auto map(std::shared_ptr<bchan<SplittedRawData>> in)
 	return out;
 }
 
-static void
-writer(Context const & ctx, GridIndex32 gidx32, WriterEntry & writerEntry, bchan<bool> & writeDone)
-{
-	auto & myChan = writerEntry.at(gidx32);
-
-	auto outFolder = ctx.outFolder / ctx.outName;
-	if (!fs::exists(outFolder)) {
-		fs::create_directories(outFolder);
-	}
-
-	auto outFile = outFolder / fs::path(filename(gidx32) + __TempFileExt);
-
-	std::ofstream out(outFile, std::ios::binary | std::ios::app | std::ios::out);
-
-	for (auto & el : *myChan) {
-		out.write((char *)(el->data()), el->size() * sizeof(Edge32));
-	}
-	out.close();
-
-	writeDone.push(true);
-}
-
 static void shuffle(Context const &											 ctx,
 					std::shared_ptr<bchan<std::shared_ptr<GridAndEdgeList>>> in,
-					bchan<bool> &											 shuffleDone,
-					bchan<bool> &											 writeDone,
-					WriterEntry &											 writerEntry,
-					std::mutex &											 writerEntryMutex,
-					std::atomic<uint32_t> &									 writerCnt)
+					bchan<bool> &											 shuffleDone)
 {
 	std::thread([&, in] {
 		// something
@@ -121,20 +94,17 @@ static void shuffle(Context const &											 ctx,
 			}
 
 			for (auto & kv : temp) {
-				std::unique_lock<std::mutex> ul(writerEntryMutex);
-
-				if (writerEntry.find(kv.first) == writerEntry.end()) {
-					writerEntry.insert_or_assign(
-						kv.first,
-						std::make_shared<bchan<std::shared_ptr<EdgeList32>>>(__ChannelSize));
-					writerCnt.fetch_add(1);
-					// log("SHUFFLE fork thread for " + std::to_string(kv.first[0]) + "-" +
-					// std::to_string(kv.first[1]));
-					fiber([&, kv] { writer(ctx, kv.first, writerEntry, writeDone); }).detach();
+				auto outFolder = ctx.outFolder / ctx.outName;
+				if (!fs::exists(outFolder)) {
+					fs::create_directories(outFolder);
 				}
-				ul.unlock();
 
-				writerEntry.at(kv.first)->push(kv.second);
+				auto outFile = outFolder / fs::path(filename(kv.first) + __TempFileExt);
+
+				std::ofstream out(outFile, std::ios::binary | std::ios::app | std::ios::out);
+
+				out.write((char *)(kv.second->data()), kv.second->size() * sizeof(Edge32));
+				out.close();
 			}
 		}
 
@@ -145,14 +115,9 @@ static void shuffle(Context const &											 ctx,
 void phase1(Context const & ctx)
 {
 	auto fn = [&](fs::path fpath) {
-		log("Adj6->EdgeList: " + fpath.string() + " Start");
+		// log("Adj6->EdgeList: " + fpath.string() + " Start");
 
 		bchan<bool> shuffleDone(__ChannelSize);
-		bchan<bool> writeDone(__ChannelSize);
-		WriterEntry writerEntry(__UnorderedMapSize);
-
-		std::mutex			  writerEntryMutex;
-		std::atomic<uint32_t> writerCnt = 0;
 
 		auto rawData		 = load<uint8_t>(fpath);
 		auto splittedRawData = split(rawData);
@@ -160,7 +125,7 @@ void phase1(Context const & ctx)
 		std::vector<decltype(map(splittedRawData))> mapper(__MapperCount);
 		for (auto & chan : mapper) {
 			chan = map(splittedRawData);
-			shuffle(ctx, chan, shuffleDone, writeDone, writerEntry, writerEntryMutex, writerCnt);
+			shuffle(ctx, chan, shuffleDone);
 		}
 
 		for (size_t i = 0; i < mapper.size(); i++) {
@@ -168,16 +133,7 @@ void phase1(Context const & ctx)
 			shuffleDone.pop(temp);
 		}
 
-		for (auto & kv : writerEntry) {
-			kv.second->close();
-		}
-
-		for (size_t i = 0; i < writerCnt.load(); i++) {
-			bool temp;
-			writeDone.pop(temp);
-		}
-
-		log("Adj6->EdgeList: " + fpath.string() + " Finished");
+		log("Phase 1 (Adj6->Edgelist) " + fpath.string() + " Converted");
 	};
 
 	auto jobs = [&] {
@@ -208,4 +164,3 @@ void phase1(Context const & ctx)
 		}
 	}
 }
-*/
