@@ -31,7 +31,7 @@ namespace fs = std::filesystem;
 // Tweaking
 #define __ChannelSize		128
 #define __UnorderedMapSize	1024
-#define __WorkerCount		16
+#define __WorkerCount		2
 #define __MapperCount		64
 #define __FilenameDelimiter "-"
 #define __TempFileExt		".el32"

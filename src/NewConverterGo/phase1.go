@@ -78,8 +78,8 @@ func phase1() {
 	targetFolder := filepath.Join(ctx.Value("outFolder").(string), ctx.Value("outName").(string))
 	os.MkdirAll(targetFolder, 0755)
 
-	workers := 32
-	shufflers := 4
+	workers := 2
+	shufflers := 64
 
 	var wg sync.WaitGroup
 
