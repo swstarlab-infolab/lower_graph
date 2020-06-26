@@ -48,8 +48,9 @@ func shuffler1(
 	go func() {
 		defer wgShuffler.Done()
 
+		temp := make(map[gidx32]([]edge32))
+
 		for dat := range in {
-			temp := make(map[gidx32]([]edge32))
 			for _, ge := range dat {
 				if _, ok := temp[ge.gidx]; !ok {
 					temp[ge.gidx] = []edge32{}
@@ -57,17 +58,57 @@ func shuffler1(
 				temp[ge.gidx] = append(temp[ge.gidx], ge.edge)
 			}
 
+			//var wgWrite sync.WaitGroup
 			for k, v := range temp {
+				if len(v) > (1 << 29) {
+					// write file
+					//wgWrite.Add(1)
+					//go func(k gidx32, v []edge32) {
+					//defer wgWrite.Done()
+					targetFile := filepath.Join(targetFolder, filenameEncode(k, ".el32"))
+					file, err := os.OpenFile(targetFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+
+					if err != nil {
+						log.Panic(err)
+					}
+					_, err = file.Write(edge32SliceToByteSlice(v))
+					if err != nil {
+						log.Panic(err)
+					}
+					file.Close()
+
+					// shrink size
+					temp[k] = v[:0]
+					//}(k, v)
+				}
+			}
+
+			//wgWrite.Wait()
+		}
+
+		//var wgWriteFinalize sync.WaitGroup
+		for k, v := range temp {
+			if len(v) > 0 {
+				//wgWriteFinalize.Add(1)
+				//go func(k gidx32, v []edge32) {
+				//defer wgWriteFinalize.Done()
+
 				targetFile := filepath.Join(targetFolder, filenameEncode(k, ".el32"))
 				file, err := os.OpenFile(targetFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 
 				if err != nil {
 					log.Panic(err)
 				}
-				file.Write(edge32SliceToByteSlice(v))
+				_, err = file.Write(edge32SliceToByteSlice(v))
+				if err != nil {
+					log.Panic(err)
+				}
 				file.Close()
+				//}(k, v)
 			}
 		}
+
+		//wgWriteFinalize.Wait()
 	}()
 }
 
@@ -78,8 +119,8 @@ func phase1() {
 	targetFolder := filepath.Join(ctx.Value("outFolder").(string), ctx.Value("outName").(string))
 	os.MkdirAll(targetFolder, 0755)
 
-	workers := 2
-	shufflers := 64
+	workers := 4
+	shufflers := 32
 
 	var wg sync.WaitGroup
 
