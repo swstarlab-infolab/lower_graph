@@ -247,22 +247,19 @@ static auto methodReady(Context & ctx, DeviceID myID)
 					// printf("start to read!\n");
 
 					// CPU
-					std::ifstream f(otherInfo.path, std::ios::binary);
-					// f.read((char *)myInfo.ptr, otherInfo.byte);
+					// std::ifstream f(otherInfo.path, std::ios::binary);
 					// printf("[%2d] %s fread       SSD[%s]->Host[%p], %ld bytes)\n", myID,
 					// tx.key.print().c_str(), otherInfo.path.c_str(), myInfo.ptr, otherInfo.byte);
 					auto fp = open64(otherInfo.path.c_str(), O_RDONLY);
 
-					uint64_t chunkByte = (1L << 30);
-					uint64_t bytePos   = 0;
+					constexpr uint64_t cDef		 = (1L << 30); // chunk Default
+					uint64_t		   chunkByte = (myInfo.byte < cDef) ? myInfo.byte : cDef;
+					uint64_t		   bytePos	 = 0;
 					while (bytePos < myInfo.byte) {
 						chunkByte =
 							(myInfo.byte - bytePos > chunkByte) ? chunkByte : myInfo.byte - bytePos;
 						auto loaded = read(fp, &(((uint8_t *)myInfo.ptr)[bytePos]), chunkByte);
 						bytePos += loaded;
-						/*
-						std::cin.ignore();
-								  */
 					}
 
 					close(fp);

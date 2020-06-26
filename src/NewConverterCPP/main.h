@@ -89,11 +89,13 @@ auto load(fs::path inFile)
 	auto fbyte = fs::file_size(inFile);
 	auto out   = std::make_shared<std::vector<T>>(fbyte / sizeof(T));
 
-	uint64_t chunkSize = (1L << 30);
-	uint64_t pos	   = 0;
+	constexpr uint64_t cDef		 = (1L << 30); // chunk Default
+	uint64_t		   chunkSize = (fbyte < cDef) ? fbyte : cDef;
+	uint64_t		   pos		 = 0;
+
 	while (pos < fbyte) {
 		chunkSize = (fbyte - pos > chunkSize) ? chunkSize : fbyte - pos;
-		auto b	  = read(fp, &(out->at(pos)), chunkSize);
+		auto b	  = read(fp, &(((uint8_t *)(out->data()))[pos]), chunkSize);
 		pos += b;
 	}
 
