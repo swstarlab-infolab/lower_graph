@@ -69,9 +69,13 @@ func loader(path string) []uint8 {
 
 	out := make([]uint8, info.Size())
 
-	_, err = file.Read(out)
-	if err != nil {
-		log.Panicln(err)
+	// If file is over 1GB, you should iteratively load files
+	for pos := int64(0); pos < info.Size(); {
+		b, err := file.ReadAt(out[pos:], pos)
+		pos += int64(b)
+		if err != nil {
+			log.Panicln(err)
+		}
 	}
 
 	return out

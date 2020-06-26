@@ -310,7 +310,7 @@ static void writeCSR(Context const & ctx, fs::path tempFilePath, std::shared_ptr
 		}
 	}
 
-	fs::remove(tempFilePath);
+	// fs::remove(tempFilePath);
 }
 
 void phase2(Context const & ctx)

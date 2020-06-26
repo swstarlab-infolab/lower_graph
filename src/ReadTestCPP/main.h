@@ -29,12 +29,8 @@ namespace fs = std::filesystem;
 #define __GridWidth (1 << 24)
 
 // Tweaking
-#define __ChannelSize		128
-#define __UnorderedMapSize	1024
-#define __WorkerCount		16
-#define __MapperCount		64
-#define __FilenameDelimiter "-"
-#define __TempFileExt		".el32"
+#define __ChannelSize 128
+#define __WorkerCount 1
 constexpr char const * __OutFileExts[] = {".row", ".ptr", ".col"};
 
 // Primitive Types
@@ -48,27 +44,6 @@ using GridIndex32	  = std::array<uint32_t, 2>;
 using GridAndEdge	  = std::pair<GridIndex32, Edge32>;
 using GridAndEdgeList = std::vector<GridAndEdge>;
 using EdgeList32	  = std::vector<Edge32>;
-
-struct KeyHash {
-	std::size_t operator()(GridIndex32 const & k) const
-	{
-		auto a = std::hash<uint64_t>{}(uint64_t(k[0]) << 32);
-		auto b = std::hash<uint64_t>{}(uint64_t(k[1]));
-		return a ^ b;
-	}
-};
-
-struct KeyEqual {
-	bool operator()(GridIndex32 const & kl, GridIndex32 const & kr) const
-	{
-		return (kl[0] == kr[0] && kl[1] == kr[1]);
-	}
-};
-
-using WriterEntry = std::unordered_map<GridIndex32,
-									   std::shared_ptr<bchan<std::shared_ptr<EdgeList32>>>,
-									   KeyHash,
-									   KeyEqual>;
 
 struct Context {
 	fs::path	inFolder;
@@ -92,9 +67,9 @@ auto load(fs::path inFile)
 	uint64_t chunkSize = (1L << 30);
 	uint64_t pos	   = 0;
 	while (pos < fbyte) {
-		chunkSize = (fbyte - pos > chunkSize) ? chunkSize : fbyte - pos;
-		auto b	  = read(fp, &(out->at(pos)), chunkSize);
-		pos += b;
+		chunkSize	= (fbyte - pos > chunkSize) ? chunkSize : fbyte - pos;
+		auto loaded = read(fp, &(out->at(pos)), chunkSize);
+		pos += loaded;
 	}
 
 	close(fp);
@@ -102,13 +77,24 @@ auto load(fs::path inFile)
 	return out;
 }
 
-std::string filename(GridIndex32 in);
+/*
+
+	f.seekg(0, std::ios::beg);
+	for (uint64_t pos = 0; pos < fbyte;) {
+		auto b = f.readsome((char *)(&(out->at(pos))), fbyte - pos);
+		std::cout << "b=" << b << ",pos=" << pos << ",left=" << fbyte - pos << std::endl;
+		// under construction
+		pos += b;
+		f.seekg(pos, std::ios::beg);
+		std::cin.ignore();
+	}
+	f.close();
+
+	*/
 
 std::shared_ptr<FileList> walk(fs::path const & inFolder, std::string const & ext);
 void					  log(std::string const & str);
 
 void phase1(Context const & ctx);
-void phase2(Context const & ctx);
-void phase3(Context const & ctx);
 
 #endif /* C095FE4C_6D1F_4B64_B717_F7FDBDAF95F7 */

@@ -1,9 +1,6 @@
 package main
 
-import (
-	"sync"
-)
-
+/*
 func max(a, b uint64) uint64 {
 	if a > b {
 		return a
@@ -140,3 +137,4 @@ func phase0() information {
 
 	return <-reducer(infomerge(result...))
 }
+*/

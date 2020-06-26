@@ -3,6 +3,7 @@
 
 #include <BuddySystem/BuddySystem.h>
 #include <cuda_runtime.h>
+#include <fcntl.h>
 #include <fstream>
 #include <limits>
 #include <mutex>
@@ -10,17 +11,6 @@
 #include <tuple>
 #include <unistd.h>
 #include <unordered_map>
-
-static size_t getFileSize(fs::path const & path)
-{
-	std::ifstream f;
-	f.open(path);
-	f.seekg(0, std::ios::end);
-	auto const fileSize = f.tellg();
-	f.seekg(0, std::ios::beg);
-	f.close();
-	return fileSize;
-}
 
 static auto genPath(Context & ctx, Key const & k)
 {
@@ -235,7 +225,7 @@ static auto methodReady(Context & ctx, DeviceID myID)
 			} else {
 				// printf("[%2d] %s Miss!\n", myID, tx.key.print().c_str());
 
-				myInfo.byte = getFileSize(genPath(ctx, tx.key));
+				myInfo.byte = fs::file_size(genPath(ctx, tx.key));
 
 				tryAllocate(ctx, tx.key, myID, myInfo, ul, iHaveLock);
 
@@ -255,12 +245,27 @@ static auto methodReady(Context & ctx, DeviceID myID)
 				assert(myID >= -1);
 				if (myID == -1) {
 					// printf("start to read!\n");
+
 					// CPU
 					std::ifstream f(otherInfo.path, std::ios::binary);
-					f.read((char *)myInfo.ptr, otherInfo.byte);
+					// f.read((char *)myInfo.ptr, otherInfo.byte);
 					// printf("[%2d] %s fread       SSD[%s]->Host[%p], %ld bytes)\n", myID,
 					// tx.key.print().c_str(), otherInfo.path.c_str(), myInfo.ptr, otherInfo.byte);
-					f.close();
+					auto fp = open64(otherInfo.path.c_str(), O_RDONLY);
+
+					uint64_t chunkByte = (1L << 30);
+					uint64_t bytePos   = 0;
+					while (bytePos < myInfo.byte) {
+						chunkByte =
+							(myInfo.byte - bytePos > chunkByte) ? chunkByte : myInfo.byte - bytePos;
+						auto loaded = read(fp, &(((uint8_t *)myInfo.ptr)[bytePos]), chunkByte);
+						bytePos += loaded;
+						/*
+						std::cin.ignore();
+								  */
+					}
+
+					close(fp);
 				} else {
 					// GPU
 					// printf("[%2d] %s cudaMemcpy Host[%p]-> GPU[%p], %ld bytes)\n", myID,
@@ -324,7 +329,7 @@ void DataManager(Context & ctx, DeviceID myID)
 						};
 						myInfo.ptr	= nullptr;
 						myInfo.path = genPath(ctx, tx.key);
-						myInfo.byte = getFileSize(myInfo.path);
+						myInfo.byte = fs::file_size(myInfo.path);
 						myInfo.ok	= true;
 						myInfo.hit	= true;
 
