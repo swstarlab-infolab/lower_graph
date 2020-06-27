@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-func mapper1(adj6 []uint8, in <-chan sRawDat) <-chan []gridEdge {
+func mapper(adj6 []uint8, in <-chan sRawDat) <-chan []gridEdge {
 	out := make(chan []gridEdge, 128)
 	go func() {
 		defer close(out)
@@ -40,7 +40,7 @@ func mapper1(adj6 []uint8, in <-chan sRawDat) <-chan []gridEdge {
 	return out
 }
 
-func shuffler1(
+func shuffler(
 	in <-chan []gridEdge,
 	wgShuffler *sync.WaitGroup,
 	targetFolder string,
@@ -58,13 +58,9 @@ func shuffler1(
 				temp[ge.gidx] = append(temp[ge.gidx], ge.edge)
 			}
 
-			//var wgWrite sync.WaitGroup
 			for k, v := range temp {
-				if len(v) > (1 << 29) {
-					// write file
-					//wgWrite.Add(1)
-					//go func(k gidx32, v []edge32) {
-					//defer wgWrite.Done()
+				// (1 << 20) x sizeof(edge32) = 1M x 8B = 8MB
+				if len(v) > (1 << 20) {
 					targetFile := filepath.Join(targetFolder, filenameEncode(k, ".el32"))
 					file, err := os.OpenFile(targetFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 
@@ -79,19 +75,12 @@ func shuffler1(
 
 					// shrink size
 					temp[k] = v[:0]
-					//}(k, v)
 				}
 			}
-
-			//wgWrite.Wait()
 		}
 
-		//var wgWriteFinalize sync.WaitGroup
 		for k, v := range temp {
 			if len(v) > 0 {
-				//wgWriteFinalize.Add(1)
-				//go func(k gidx32, v []edge32) {
-				//defer wgWriteFinalize.Done()
 
 				targetFile := filepath.Join(targetFolder, filenameEncode(k, ".el32"))
 				file, err := os.OpenFile(targetFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -104,11 +93,9 @@ func shuffler1(
 					log.Panic(err)
 				}
 				file.Close()
-				//}(k, v)
 			}
 		}
 
-		//wgWriteFinalize.Wait()
 	}()
 }
 
@@ -137,8 +124,8 @@ func phase1() {
 				data := loader(file)
 				splitPos := splitter(data)
 				for i := 0; i < shufflers; i++ {
-					mapped := mapper1(data, splitPos)
-					shuffler1(mapped, &wgShuffler, targetFolder)
+					mapped := mapper(data, splitPos)
+					shuffler(mapped, &wgShuffler, targetFolder)
 				}
 
 				wgShuffler.Wait()
