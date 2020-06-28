@@ -1,21 +1,12 @@
-#include "main.h"
+#include "../main.h"
 
-#include <GridCSR/GridCSR.h>
+#include "../GridCSR.h"
 
-static auto filenameDecode(std::string const & in)
+#include <chrono>
+
+static void routine(Context const & ctx)
 {
-	GridIndex32 gidx32 = {0, 0};
-
-	auto delimPos = in.find(__FilenameDelimiter);
-	gidx32[0]	  = atoi(in.substr(0, delimPos).c_str());
-	gidx32[1]	  = atoi(in.substr(delimPos + 1, in.size()).c_str());
-
-	return gidx32;
-}
-// metadata writing
-void phase3(Context const & ctx)
-{
-	auto metaDataPath = ctx.outFolder / ctx.outName / fs::path("meta.json");
+	auto metaDataPath = ctx.outFolder / fs::path("meta.json");
 
 	GridCSR::MetaData m;
 
@@ -26,7 +17,7 @@ void phase3(Context const & ctx)
 
 	m.info.width.row = m.info.width.col = __GridWidth;
 
-	auto files = walk(ctx.outFolder / ctx.outName, ".row");
+	auto files = walk(ctx.outFolder, ".row");
 
 	uint32_t maxRow = 0, maxCol = 0;
 	for (auto & f : *files) {
@@ -54,4 +45,36 @@ void phase3(Context const & ctx)
 	m.Save(metaDataPath);
 
 	log("Phase 3 (Json Metadata) " + metaDataPath.string() + " Written");
+}
+
+static void init(Context & ctx, int argc, char * argv[])
+{
+	if (argc != 2) {
+		fprintf(stderr, "Usage: %s <Folder>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+	ctx.inFolder  = fs::absolute(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
+	ctx.outFolder = ctx.inFolder;
+	ctx.outName	  = ctx.outFolder.parent_path().stem().string();
+}
+
+int main(int argc, char * argv[])
+{
+	Context ctx;
+	init(ctx, argc, argv);
+
+	{
+		auto start = std::chrono::system_clock::now();
+
+		routine(ctx);
+
+		auto end = std::chrono::system_clock::now();
+
+		std::chrono::duration<double> elapsed = end - start;
+		log("Phase 3 (Json Metadata) Complete, Elapsed Time: " + std::to_string(elapsed.count()) +
+			" (sec)");
+	}
+
+	return 0;
 }

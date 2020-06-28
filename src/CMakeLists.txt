@@ -1,5 +1,5 @@
 set(CMAKE_CXX_COMPILER ${CXX})
-set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
+set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17 -mavx2")
 #set(CMAKE_CXX_FLAGS "-Wall -Og -std=c++17 -g0")
 
 include_directories(
@@ -14,8 +14,8 @@ link_directories(
 
 add_subdirectory(BuddySystem)
 add_subdirectory(Converter)
-add_subdirectory(NewConverterCPP)
-add_subdirectory(NewConverterGo)
+add_subdirectory(Adj6ToCSR)
+add_subdirectory(IntrinsicTest)
 add_subdirectory(ReadTestCPP)
 add_subdirectory(GridCSR)
 add_subdirectory(TriangleCounting)

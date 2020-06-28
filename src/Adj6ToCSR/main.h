@@ -12,11 +12,12 @@ namespace fs = std::filesystem;
 #include <array>
 #include <boost/fiber/all.hpp>
 #include <fcntl.h>
-#include <fstream>
-#include <memory>
+//#include <fstream>
+//#include <memory>
+#include <iomanip>
 #include <string>
 #include <tuple>
-#include <unordered_map>
+//#include <unordered_map>
 #include <vector>
 
 // shorten long name
@@ -49,6 +50,7 @@ using GridAndEdge	  = std::pair<GridIndex32, Edge32>;
 using GridAndEdgeList = std::vector<GridAndEdge>;
 using EdgeList32	  = std::vector<Edge32>;
 
+/*
 struct KeyHash {
 	std::size_t operator()(GridIndex32 const & k) const
 	{
@@ -64,11 +66,7 @@ struct KeyEqual {
 		return (kl[0] == kr[0] && kl[1] == kr[1]);
 	}
 };
-
-using WriterEntry = std::unordered_map<GridIndex32,
-									   std::shared_ptr<bchan<std::shared_ptr<EdgeList32>>>,
-									   KeyHash,
-									   KeyEqual>;
+*/
 
 struct Context {
 	fs::path	inFolder;
@@ -104,13 +102,47 @@ auto load(fs::path inFile)
 	return out;
 }
 
-std::string filename(GridIndex32 in);
+auto filenameEncode(GridIndex32 in)
+{
+	return std::to_string(in[0]) + __FilenameDelimiter + std::to_string(in[1]);
+}
 
-std::shared_ptr<FileList> walk(fs::path const & inFolder, std::string const & ext);
-void					  log(std::string const & str);
+auto filenameDecode(std::string const & in)
+{
+	GridIndex32 gidx32 = {0, 0};
 
-void phase1(Context const & ctx);
-void phase2(Context const & ctx);
-void phase3(Context const & ctx);
+	auto delimPos = in.find(__FilenameDelimiter);
+	gidx32[0]	  = atoi(in.substr(0, delimPos).c_str());
+	gidx32[1]	  = atoi(in.substr(delimPos + 1, in.size()).c_str());
+
+	return gidx32;
+}
+
+auto walk(fs::path const & inFolder, std::string const & ext)
+{
+	auto out = std::make_shared<FileList>();
+	for (fs::recursive_directory_iterator iter(inFolder), end; iter != end; iter++) {
+		if (fs::is_regular_file(iter->status()) && fs::file_size(iter->path()) != 0) {
+			if (ext != "" && iter->path().extension() != ext) {
+				continue;
+			}
+			out->push_back(iter->path());
+		}
+	}
+	return out;
+}
+
+void log(std::string const & s)
+{
+	auto currentTimeAndDate = [] {
+		auto			  now		= std::chrono::system_clock::now();
+		auto			  in_time_t = std::chrono::system_clock::to_time_t(now);
+		std::stringstream ss;
+		ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X");
+		return ss.str();
+	};
+
+	printf("%s %s\n", currentTimeAndDate().c_str(), s.c_str());
+}
 
 #endif /* C095FE4C_6D1F_4B64_B717_F7FDBDAF95F7 */

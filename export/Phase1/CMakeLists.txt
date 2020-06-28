@@ -1,4 +1,4 @@
-set(outFileName NewConverterGo)
+set(outFileName Adj6ToCSR-Phase1)
 
 add_custom_target(${outFileName} ALL
     COMMENT "Golang build ${outFileName}"

@@ -1,6 +1,8 @@
-#include "main.h"
+#include "../main.h"
 
 #include <atomic>
+#include <chrono>
+#include <fstream>
 #include <iostream>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -294,8 +296,8 @@ static void writeCSR(Context const & ctx, fs::path tempFilePath, std::shared_ptr
 	std::vector<std::thread> writeThreads(3);
 	for (size_t i = 0; i < writeThreads.size(); i++) {
 		writeThreads[i] = std::thread([&, i] {
-			auto outFile = (ctx.outFolder / ctx.outName) /
-						   fs::path(tempFilePath.stem().string() + __OutFileExts[i]);
+			auto outFile =
+				(ctx.outFolder / fs::path(tempFilePath.stem().string() + __OutFileExts[i]));
 
 			std::ofstream f(outFile, std::ios::binary | std::ios::out);
 
@@ -313,7 +315,7 @@ static void writeCSR(Context const & ctx, fs::path tempFilePath, std::shared_ptr
 	fs::remove(tempFilePath);
 }
 
-void phase2(Context const & ctx)
+static void routine(Context const & ctx)
 {
 	auto fn = [&](fs::path fpath) {
 		auto rawData = load<Edge32>(fpath);
@@ -349,4 +351,36 @@ void phase2(Context const & ctx)
 			t.join();
 		}
 	}
+}
+
+static void init(Context & ctx, int argc, char * argv[])
+{
+	if (argc != 2) {
+		fprintf(stderr, "Usage: %s <Folder>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+	ctx.inFolder  = fs::absolute(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
+	ctx.outFolder = ctx.inFolder;
+	ctx.outName	  = "";
+}
+
+int main(int argc, char * argv[])
+{
+	Context ctx;
+	init(ctx, argc, argv);
+
+	{
+		auto start = std::chrono::system_clock::now();
+
+		routine(ctx);
+
+		auto end = std::chrono::system_clock::now();
+
+		std::chrono::duration<double> elapsed = end - start;
+		log("Phase 2 (Edgelist->CSR) Complete, Elapsed Time: " + std::to_string(elapsed.count()) +
+			" (sec)");
+	}
+
+	return 0;
 }

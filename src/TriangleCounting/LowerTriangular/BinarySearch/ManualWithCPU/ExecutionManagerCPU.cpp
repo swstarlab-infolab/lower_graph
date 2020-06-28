@@ -1,6 +1,7 @@
 #include "ExecutionManager.cuh"
 
 #include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
 #include <tbb/parallel_scan.h>
 #include <thread>
 
@@ -22,6 +23,7 @@ static void resetLookupTemp(Grid const g, Lookup * luTemp)
 
 static void kernel(Grids const g, Lookup const * lookup0, Lookup const * lookup2, Count * count)
 {
+	/*
 	Count mycount = 0;
 
 	int SHARED[1024];
@@ -90,6 +92,7 @@ static void kernel(Grids const g, Lookup const * lookup0, Lookup const * lookup2
 	if ((threadIdx.x & 31) == 0) {
 		atomicAdd(count, mycount);
 	}
+	*/
 }
 
 Count launchKernelCPU(Context & ctx, DeviceID myID, Grids & G)
