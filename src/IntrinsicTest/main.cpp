@@ -1,5 +1,3 @@
-#include "main.h"
-
 #include <chrono>
 #include <immintrin.h>
 #include <iostream>

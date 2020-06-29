@@ -1,153 +1,107 @@
-#include "ExecutionManager.cuh"
-#include "type.cuh"
+#include "ExecutionManager.h"
+#include "context.h"
+#include "type.h"
 
-#include <array>
-#include <chrono>
-#include <iostream>
-#include <memory>
+#include <cub/device/device_scan.cuh>
+#include <cuda_runtime.h>
+#include <exception>
 #include <thread>
 
-static void Execution(Context &								ctx,
-					  DeviceID								myID,
-					  std::shared_ptr<bchan<Command>>		in,
-					  std::shared_ptr<bchan<CommandResult>> out)
+void ExecutionManager::init(int const id, sp<DataManager> dm)
 {
-	using DataTxCallback = bchan<MemInfo<Vertex>>;
+	this->ID = id;
+	this->DM = dm;
 
-	size_t hitCount = 0, missCount = 0;
-
-	for (auto & req : *in) {
-		// PREPARE
-		auto start = std::chrono::system_clock::now();
-
-		Grids								memInfo;
-		std::array<std::array<fiber, 3>, 3> waitGroup;
-		for (uint32_t i = 0; i < 3; i++) {
-			for (uint32_t type = 0; type < 3; type++) {
-				waitGroup[i][type] = fiber([&, myID, i, type] {
-					auto callback = std::make_shared<DataTxCallback>(2);
-
-					Tx tx;
-					tx.method = Method::Ready;
-					tx.key	  = {req.gidx[i], (DataType)(type)};
-					tx.cb	  = callback;
-
-					ctx.dataManagerCtx[myID].chan->push(tx);
-
-					for (auto & cbres : *callback) {
-						memInfo[i][type] = cbres;
-					}
-				});
-			}
-		}
-
-		// Must wait all memory info
-		for (auto & row : waitGroup) {
-			for (auto & w : row) {
-				if (w.joinable()) {
-					w.join();
-				}
-			}
-		}
-
-		for (auto & row : memInfo) {
-			for (auto & i : row) {
-				if (i.hit) {
-					hitCount++;
-				} else {
-					missCount++;
-				}
-			}
-		}
-
-		Count myTriangle = 0;
-		// LAUNCH
-		if (myID > -1) {
-			myTriangle = launchKernelGPU(ctx, myID, memInfo);
-		} else {
-			// myTriangle = launchKernelCPU(ctx, myID, memInfo);
-		}
-
-		/*
-				printf("Kernel End:\n"
-					   "(%d,%d):[%s,%s,%s]\n"
-					   "(%d,%d):[%s,%s,%s]\n"
-					   "(%d,%d):[%s,%s,%s]\n",
-					   req.gidx[0][0],
-					   req.gidx[0][1],
-					   memInfo[0][0].print().c_str(),
-					   memInfo[0][1].print().c_str(),
-					   memInfo[0][2].print().c_str(),
-					   req.gidx[1][0],
-					   req.gidx[1][1],
-					   memInfo[1][0].print().c_str(),
-					   memInfo[1][1].print().c_str(),
-					   memInfo[1][2].print().c_str(),
-					   req.gidx[2][0],
-					   req.gidx[2][1],
-					   memInfo[2][0].print().c_str(),
-					   memInfo[2][1].print().c_str(),
-					   memInfo[2][2].print().c_str());
-					   */
-
-		auto end = std::chrono::system_clock::now();
-
-		// RELEASE MEMORY
-		for (uint32_t i = 0; i < 3; i++) {
-			for (uint32_t type = 0; type < 3; type++) {
-				waitGroup[i][type] = fiber([&, myID, i, type] {
-					auto callback = std::make_shared<DataTxCallback>(2);
-
-					Tx tx;
-					tx.method = Method::Done;
-					tx.key	  = {req.gidx[i], (DataType)(type)};
-					tx.cb	  = callback;
-
-					ctx.dataManagerCtx[myID].chan->push(tx);
-
-					for (auto & cbres : *callback) {
-						memInfo[i][type] = cbres;
-					}
-				});
-			}
-		}
-
-		for (auto & row : waitGroup) {
-			for (auto & w : row) {
-				if (w.joinable()) {
-					w.join();
-				}
-			}
-		}
-
-		// CALLBACK RESPONSE
-		CommandResult res;
-		res.gidx		= req.gidx;
-		res.deviceID	= myID;
-		res.triangle	= myTriangle;
-		res.elapsedTime = std::chrono::duration<double>(end - start).count();
-
-		out->push(res);
+	if (this->ID > -1) {
+		this->initGPU();
+	} else if (this->ID == -1) {
+		this->initCPU();
+	} else {
+		throw std::runtime_error("Wrong Index");
 	}
-
-	ctx.dataManagerCtx[myID].chan->close();
-	out->close();
-
-	printf("HIT: %ld, MISS: %ld, HIT/TOTAL: %lf\n",
-		   hitCount,
-		   missCount,
-		   double(hitCount) / double(hitCount + missCount));
 }
 
-std::shared_ptr<bchan<CommandResult>>
-ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in)
+void ExecutionManager::initCPU()
 {
-	auto out = std::make_shared<bchan<CommandResult>>(1 << 4);
-	if (myID >= -1) {
-		std::thread([&, myID, in, out] { Execution(ctx, myID, in, out); }).detach();
-	} else {
-		out->close();
+	for (auto & lu : this->mem.lookup) {
+		lu.byte = sizeof(Vertex32) * ctx.grid.width;
+		lu.ptr	= (Vertex32 *)this->DM->manualAlloc(lu.byte);
+		memset(lu.ptr, 0x00, lu.byte);
 	}
 
-	return out;
+	this->mem.count.byte = sizeof(Count);
+	this->mem.count.ptr	 = (Count *)this->DM->manualAlloc(this->mem.count.byte);
+	memset(this->mem.count.ptr, 0x00, this->mem.count.byte);
+}
+
+void ExecutionManager::initGPU()
+{
+	for (auto & lu : this->mem.lookup) {
+		cudaSetDevice(this->ID);
+		lu.byte = sizeof(Vertex32) * ctx.grid.width;
+		lu.ptr	= (Vertex32 *)this->DM->manualAlloc(lu.byte);
+		cudaMemset(lu.ptr, 0x00, lu.byte);
+	}
+
+	cudaSetDevice(this->ID);
+	this->mem.count.byte = sizeof(Count);
+	this->mem.count.ptr	 = (Count *)this->DM->manualAlloc(this->mem.count.byte);
+	cudaMemset(this->mem.count.ptr, 0x00, this->mem.count.byte);
+
+	cudaSetDevice(this->ID);
+	cub::DeviceScan::ExclusiveSum(nullptr,
+								  this->mem.scan.byte,
+								  this->mem.lookup[1].ptr,
+								  this->mem.lookup[0].ptr,
+								  this->mem.lookup[0].count());
+	this->mem.scan.ptr = (Count *)this->DM->manualAlloc(this->mem.scan.byte);
+	cudaMemset(this->mem.scan.ptr, 0x00, this->mem.scan.byte);
+}
+
+void ExecutionManager::run()
+{
+	std::thread([&] {
+		auto myInChan  = (this->ID > -1) ? ctx.chan.orderGPU : ctx.chan.orderCPU;
+		auto myOutChan = ctx.chan.report[this->ID];
+
+		for (auto & order : *myInChan) {
+			std::array<std::array<sp<bchan<DataManager::TxCb>>, 3>, 3> callbacks;
+
+			for (auto & cbrow : callbacks) {
+				for (auto & cb : cbrow) {
+					cb = makeSp<bchan<DataManager::TxCb>>(1);
+				}
+			}
+
+			for (uint8_t i = 0; i < callbacks.size(); i++) {
+				for (uint8_t j = 0; j < callbacks[i].size(); j++) {
+					DataManager::Tx tx;
+
+					tx.idx	  = order[i];
+					tx.method = DataManager::Method::ready;
+					tx.type	  = (DataManager::Type)j;
+					tx.cb	  = callbacks[i][j];
+					this->DM->req(tx);
+				}
+			}
+
+			for (auto & cbrow : callbacks) {
+				for (auto & cb : cbrow) {
+					for (auto & res : *cb) {
+						if (!res.ok) {
+							// failed
+						}
+					}
+				}
+			}
+
+			Report report;
+			report.g3		= order;
+			report.deviceID = this->ID;
+			report.triangle = 0; // Something Calc
+
+			myOutChan->push(report);
+		}
+		myOutChan->close();
+	}).detach();
 }

@@ -83,7 +83,9 @@
         "hash_map": "cpp",
         "hash_set": "cpp",
         "__config": "cpp",
-        "locale": "cpp"
+        "locale": "cpp",
+        "__locale": "cpp",
+        "ios": "cpp"
     },
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
     "C_Cpp.autocomplete": "Default",
