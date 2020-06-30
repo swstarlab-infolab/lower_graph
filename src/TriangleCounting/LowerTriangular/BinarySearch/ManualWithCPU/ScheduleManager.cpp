@@ -35,35 +35,58 @@ static auto merge(std::unordered_map<int, sp<bchan<Report>>> & in)
 void ScheduleManager::run()
 {
 	std::thread([&] {
+		printf("SM: start\n");
+
 		for (uint32_t row = 0; row < ctx.grid.count; row++) {
 			for (uint32_t col = 0; col <= row; col++) {
 				for (uint32_t i = col; i <= row; i++) {
 					Order order = {{{i, col}, {row, col}, {row, i}}};
 
-					std::array<size_t, 3> fbyte;
+					std::array<size_t, 3> fbyte = {
+						0,
+					};
+
 					for (int i = 0; i < 3; i++) {
-						auto fname = ctx.folder / filenameEncode(order[i]);
-						fbyte[i]   = fs::file_size(fname.string() + ".row") +
-								   fs::file_size(fname.string() + ".ptr") +
-								   fs::file_size(fname.string() + ".col");
+						auto fpath = ctx.folder / filenameEncode(order[i]);
+						fbyte[i]   = size_t(fs::file_size(fs::path(fpath.string() + ".row"))) +
+								   size_t(fs::file_size(fs::path(fpath.string() + ".ptr"))) +
+								   size_t(fs::file_size(fs::path(fpath.string() + ".col")));
 					}
+
+					printf("SM: (%3d,%3d) %ld Bytes, (%3d,%3d) %ld Bytes, (%3d,%3d) %ld Bytes\n",
+						   i,
+						   col,
+						   fbyte[0],
+						   row,
+						   col,
+						   fbyte[1],
+						   row,
+						   i,
+						   fbyte[2]);
 
 					if (fbyte[0] < ctx.threshold && fbyte[1] < ctx.threshold &&
 						fbyte[2] < ctx.threshold) {
+						printf("SM: pushed to CPU\n");
 						ctx.chan.orderCPU->push(order);
 					} else {
+						printf("SM: pushed to GPU\n");
 						ctx.chan.orderGPU->push(order);
 					}
 				}
 			}
 		}
+
 		ctx.chan.orderCPU->close();
 		ctx.chan.orderGPU->close();
+
+		printf("SM: closed all channel\n");
 	}).detach();
 }
 
 void ScheduleManager::wait()
 {
+	printf("SM: wait\n");
+
 	Count totalTriangles = 0;
 
 	for (auto & r : *(merge(ctx.chan.report))) {

@@ -85,7 +85,8 @@
         "__config": "cpp",
         "locale": "cpp",
         "__locale": "cpp",
-        "ios": "cpp"
+        "ios": "cpp",
+        "__split_buffer": "cpp"
     },
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
     "C_Cpp.autocomplete": "Default",

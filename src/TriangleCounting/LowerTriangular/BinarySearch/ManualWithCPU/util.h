@@ -9,6 +9,7 @@ namespace fs = std::experimental::filesystem;
 namespace fs = std::filesystem;
 #endif
 
+#include "context.h"
 #include "type.h"
 
 #include <string>

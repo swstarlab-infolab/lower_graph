@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 
 struct Context {
 private:
-	uint32_t walk(std::string const & ext);
+	uint32_t findMaxGridIndex(std::string const & ext);
 
 public:
 	fs::path folder;

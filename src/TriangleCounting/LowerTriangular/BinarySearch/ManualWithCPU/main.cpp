@@ -13,7 +13,6 @@ int main(int argc, char * argv[])
 
 	auto start = std::chrono::system_clock::now();
 
-	/*
 	for (auto & m : ctx.DM) {
 		m.second->run();
 	}
@@ -23,7 +22,6 @@ int main(int argc, char * argv[])
 	ctx.SM->run();
 
 	ctx.SM->wait();
-	*/
 
 	auto end = std::chrono::system_clock::now();
 

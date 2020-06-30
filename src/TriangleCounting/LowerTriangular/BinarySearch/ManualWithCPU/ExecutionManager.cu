@@ -5,6 +5,7 @@
 #include <cub/device/device_scan.cuh>
 #include <cuda_runtime.h>
 #include <exception>
+#include <iostream>
 #include <thread>
 
 void ExecutionManager::init(int const id, sp<DataManager> dm)
@@ -23,6 +24,8 @@ void ExecutionManager::init(int const id, sp<DataManager> dm)
 
 void ExecutionManager::initCPU()
 {
+	std::cout << "EM: CPU init" << std::endl;
+
 	for (auto & lu : this->mem.lookup) {
 		lu.byte = sizeof(Vertex32) * ctx.grid.width;
 		lu.ptr	= (Vertex32 *)this->DM->manualAlloc(lu.byte);
@@ -36,6 +39,8 @@ void ExecutionManager::initCPU()
 
 void ExecutionManager::initGPU()
 {
+	std::cout << "EM: GPU " << this->ID << " init" << std::endl;
+
 	for (auto & lu : this->mem.lookup) {
 		cudaSetDevice(this->ID);
 		lu.byte = sizeof(Vertex32) * ctx.grid.width;
@@ -61,6 +66,8 @@ void ExecutionManager::initGPU()
 void ExecutionManager::run()
 {
 	std::thread([&] {
+		printf("EM: start %d\n", this->ID);
+
 		auto myInChan  = (this->ID > -1) ? ctx.chan.orderGPU : ctx.chan.orderCPU;
 		auto myOutChan = ctx.chan.report[this->ID];
 
@@ -69,28 +76,25 @@ void ExecutionManager::run()
 
 			for (auto & cbrow : callbacks) {
 				for (auto & cb : cbrow) {
-					cb = makeSp<bchan<DataManager::TxCb>>(1);
+					cb = makeSp<bchan<DataManager::TxCb>>(2);
+				}
+			}
+
+			std::array<std::array<fiber, 3>, 3> fibers;
+
+			for (uint8_t i = 0; i < callbacks.size(); i++) {
+				for (uint8_t j = 0; j < callbacks[i].size(); j++) {
+					fibers[i][j] = fiber([&, i, j] {
+						DataManager::Tx tx;
+						this->DM->reqReady(order[i], (DataManager::Type)j);
+					});
 				}
 			}
 
 			for (uint8_t i = 0; i < callbacks.size(); i++) {
 				for (uint8_t j = 0; j < callbacks[i].size(); j++) {
-					DataManager::Tx tx;
-
-					tx.idx	  = order[i];
-					tx.method = DataManager::Method::ready;
-					tx.type	  = (DataManager::Type)j;
-					tx.cb	  = callbacks[i][j];
-					this->DM->req(tx);
-				}
-			}
-
-			for (auto & cbrow : callbacks) {
-				for (auto & cb : cbrow) {
-					for (auto & res : *cb) {
-						if (!res.ok) {
-							// failed
-						}
+					if (fibers[i][j].joinable()) {
+						fibers[i][j].join();
 					}
 				}
 			}
@@ -101,7 +105,25 @@ void ExecutionManager::run()
 			report.triangle = 0; // Something Calc
 
 			myOutChan->push(report);
+
+			for (uint8_t i = 0; i < callbacks.size(); i++) {
+				for (uint8_t j = 0; j < callbacks[i].size(); j++) {
+					fibers[i][j] = fiber([&, i, j] {
+						DataManager::Tx tx;
+						this->DM->reqDone(order[i], (DataManager::Type)j);
+					});
+				}
+			}
+
+			for (uint8_t i = 0; i < callbacks.size(); i++) {
+				for (uint8_t j = 0; j < callbacks[i].size(); j++) {
+					if (fibers[i][j].joinable()) {
+						fibers[i][j].join();
+					}
+				}
+			}
 		}
 		myOutChan->close();
+		this->DM->closeAllChan();
 	}).detach();
 }

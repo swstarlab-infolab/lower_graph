@@ -12,18 +12,9 @@ class DataManager
 {
 public:
 	enum class Type : uint8_t { row, ptr, col };
-	enum class Method : uint8_t { find, ready, done };
-	struct TxCb {
-		bool hit, ok;
-	};
-	struct Tx {
-		Method			method;
-		GridIndex32		idx;
-		Type			type;
-		sp<bchan<TxCb>> cb;
-	};
 
-private:
+	enum class Method : uint8_t { find, ready, done };
+
 	struct CacheKey {
 		GridIndex32 idx;
 		Type		type;
@@ -47,6 +38,18 @@ private:
 		}
 	};
 
+	struct TxCb {
+		MemInfo<Vertex32> info;
+		std::string		  path;
+		bool			  hit, ok;
+	};
+
+	struct Tx {
+		CacheKey		key;
+		sp<bchan<TxCb>> cb;
+	};
+
+private:
 	struct CacheVal {
 		MemInfo<Vertex32> info;
 		int				  refCnt;
@@ -73,28 +76,49 @@ private:
 	using Cache = std::unordered_map<CacheKey, CacheVal, CacheKeyHash, CacheKeyEqual>;
 
 	struct {
-		MemInfo<void>				buf;
-		std::shared_ptr<Cache>		cache;	  // Cache
-		std::shared_ptr<std::mutex> cacheMtx; // Cache Mutex
+		MemInfo<void>		  buf;
+		portable_buddy_system buddy;
+		sp<Cache>			  cache;	// Cache
+		std::mutex			  cacheMtx; // Cache Mutex
 	} mem;
 
 	int ID;
 
-	sp<bchan<Tx>> tx;
-
 	sp<DataManager> upstream = nullptr;
 
-	portable_buddy_system buddy;
+	struct {
+		sp<bchan<Tx>> ready, find, done;
+	} chan;
+
+	std::string pathEncode(CacheKey const key);
+
+	void tryAllocate(CacheKey const					key,
+					 TxCb &							txcb,
+					 std::unique_lock<std::mutex> & ul,
+					 bool &							iHaveLock);
 
 	void initCPU();
 	void initGPU();
-	void initStorage();
+	// void initStorage();
+
+	void methodReady(); // Async Function
+	void methodFind();	// Async Function
+	void methodDone();	// Async Function
+
+	void routine();		   // Async Function
+	void routineStorage(); // Async Function
 
 public:
 	void init(int const ID, sp<DataManager> upstream);
-	void run();
+	void run(); // Async Function
 
 	void * manualAlloc(size_t const byte);
-	void   req(Tx & in) { this->tx->push(in); }
+	// void   req(Tx & in) { this->chan.tx->push(in); }
+
+	TxCb reqFind(GridIndex32 const key, Type const type);
+	TxCb reqReady(GridIndex32 const key, Type const type);
+	TxCb reqDone(GridIndex32 const key, Type const type);
+
+	void closeAllChan();
 };
 #endif /* F2E64CCA_9380_48B5_8695_08A9A2A38B40 */

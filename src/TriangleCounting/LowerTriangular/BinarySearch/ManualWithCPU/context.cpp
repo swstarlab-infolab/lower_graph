@@ -6,7 +6,7 @@
 
 Context ctx; // Global variable
 
-uint32_t Context::walk(std::string const & ext)
+uint32_t Context::findMaxGridIndex(std::string const & ext)
 {
 	uint32_t max = 0;
 	bool	 ok	 = false;
@@ -47,7 +47,8 @@ void Context::init(int argc, char * argv[])
 
 	// ctx.grid
 	this->grid.width = (1 << 24);
-	this->grid.count = this->walk(".row");
+	this->grid.count = this->findMaxGridIndex(".row") + 1;
+	std::cout << "this->grid.count: " << this->grid.count << std::endl;
 
 	// ctx.gpu
 	cudaGetDeviceCount(&this->gpu.devices);

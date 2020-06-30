@@ -15,6 +15,7 @@ link_directories(
 add_subdirectory(BuddySystem)
 add_subdirectory(Converter)
 add_subdirectory(Adj6ToCSR)
+add_subdirectory(Adj6ToEL32)
 add_subdirectory(IntrinsicTest)
 add_subdirectory(ReadTestCPP)
 add_subdirectory(GridCSR)
