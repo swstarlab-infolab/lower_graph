@@ -84,3 +84,10 @@ void Context::init(int argc, char * argv[])
 	// Alloc Schedule Manager
 	this->SM = makeSp<ScheduleManager>();
 }
+
+void Context::finalize()
+{
+	for (int i = -2; i < this->gpu.devices; i++) {
+		this->DM[i]->closeAllChan();
+	}
+}

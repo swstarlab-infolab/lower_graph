@@ -23,6 +23,8 @@ int main(int argc, char * argv[])
 
 	ctx.SM->wait();
 
+	ctx.finalize();
+
 	auto end = std::chrono::system_clock::now();
 
 	std::cout << "REALTIME: " << std::chrono::duration<double>(end - start).count() << std::endl;

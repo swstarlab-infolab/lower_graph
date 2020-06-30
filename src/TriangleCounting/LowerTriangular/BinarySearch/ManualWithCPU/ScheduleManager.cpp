@@ -35,7 +35,7 @@ static auto merge(std::unordered_map<int, sp<bchan<Report>>> & in)
 void ScheduleManager::run()
 {
 	std::thread([&] {
-		printf("SM: start\n");
+		// printf("SM: start\n");
 
 		for (uint32_t row = 0; row < ctx.grid.count; row++) {
 			for (uint32_t col = 0; col <= row; col++) {
@@ -66,10 +66,10 @@ void ScheduleManager::run()
 
 					if (fbyte[0] < ctx.threshold && fbyte[1] < ctx.threshold &&
 						fbyte[2] < ctx.threshold) {
-						printf("SM: pushed to CPU\n");
+						// printf("SM: pushed to CPU\n");
 						ctx.chan.orderCPU->push(order);
 					} else {
-						printf("SM: pushed to GPU\n");
+						// printf("SM: pushed to GPU\n");
 						ctx.chan.orderGPU->push(order);
 					}
 				}
@@ -79,13 +79,13 @@ void ScheduleManager::run()
 		ctx.chan.orderCPU->close();
 		ctx.chan.orderGPU->close();
 
-		printf("SM: closed all channel\n");
+		// printf("SM: closed all channel\n");
 	}).detach();
 }
 
 void ScheduleManager::wait()
 {
-	printf("SM: wait\n");
+	// printf("SM: wait\n");
 
 	Count totalTriangles = 0;
 

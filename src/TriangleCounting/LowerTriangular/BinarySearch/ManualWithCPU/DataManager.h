@@ -39,9 +39,9 @@ public:
 	};
 
 	struct TxCb {
-		MemInfo<Vertex32> info;
-		std::string		  path;
-		bool			  hit, ok;
+		MemInfo<Vertex> info;
+		std::string		path;
+		bool			hit, ok;
 	};
 
 	struct Tx {
@@ -51,8 +51,8 @@ public:
 
 private:
 	struct CacheVal {
-		MemInfo<Vertex32> info;
-		int				  refCnt;
+		MemInfo<Vertex> info;
+		int				refCnt;
 	};
 
 	struct CacheKeyHash {

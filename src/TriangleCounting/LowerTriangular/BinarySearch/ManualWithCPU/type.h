@@ -13,7 +13,7 @@
 #define uchan  boost::fibers::unbuffered_channel
 #define fiber  boost::fibers::fiber
 
-using Vertex32	  = uint32_t;
+using Vertex	  = uint32_t;
 using GridIndex32 = std::array<uint32_t, 2>;
 using Grid3		  = std::array<GridIndex32, 3>;
 using Count		  = unsigned long long;

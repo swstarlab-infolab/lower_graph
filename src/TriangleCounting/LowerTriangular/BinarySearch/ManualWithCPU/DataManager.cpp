@@ -7,6 +7,21 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
+#define CUDACHECK()                        \
+	do {                                   \
+		auto e = cudaGetLastError();       \
+		if (e) {                           \
+			printf("%s:%d, %s(%d), %s\n",  \
+				   __FILE__,               \
+				   __LINE__,               \
+				   cudaGetErrorName(e),    \
+				   e,                      \
+				   cudaGetErrorString(e)); \
+			cudaDeviceReset();             \
+			exit(EXIT_FAILURE);            \
+		}                                  \
+	} while (false)
+
 void DataManager::init(int const ID, sp<DataManager> upstream)
 {
 	this->ID	   = ID;
@@ -30,7 +45,7 @@ void DataManager::initCPU()
 	std::cout << "DM: CPU init, Me: " << this << ", Upstream: " << this->upstream << std::endl;
 
 	// size_t freeMem = (1L << 37); // 128GB
-	size_t freeMem = (1L << 33); // 8GB
+	size_t freeMem = (1L << 32); // 4GB
 
 	this->mem.buf.byte = freeMem;
 	cudaMallocHost((void **)&this->mem.buf.ptr, this->mem.buf.byte);
@@ -46,12 +61,16 @@ void DataManager::initGPU()
 
 	size_t freeMem;
 	cudaSetDevice(this->ID);
+	cudaDeviceReset();
+	CUDACHECK();
 	cudaMemGetInfo(&freeMem, nullptr);
+	CUDACHECK();
 	freeMem -= (1L << 29);
 
 	cudaSetDevice(this->ID);
 	this->mem.buf.byte = freeMem;
 	cudaMalloc((void **)&this->mem.buf.ptr, this->mem.buf.byte);
+	CUDACHECK();
 	this->mem.buddy.init(memrgn_t{this->mem.buf.ptr, this->mem.buf.byte}, 256, 1);
 
 	this->mem.cache = std::make_shared<Cache>(1 << 24);
@@ -96,7 +115,6 @@ void DataManager::routineStorage()
 	std::thread([this] {
 		for (auto & tx : *this->chan.find) {
 			// fiber([this, tx] {
-			printf("DM: Storage find\n");
 			TxCb myInfo;
 			myInfo.info.ptr	 = nullptr;
 			myInfo.info.byte = 0;
@@ -104,7 +122,11 @@ void DataManager::routineStorage()
 			myInfo.hit		 = true;
 			myInfo.ok		 = true;
 
-			printf("DM: Storage find, (%d,%d)\n", tx.key.idx[0], tx.key.idx[1]);
+			printf("DM: dev %d, find, (%d,%d) %ld Bytes\n",
+				   this->ID,
+				   tx.key.idx[0],
+				   tx.key.idx[1],
+				   myInfo.info.byte);
 			tx.cb->push(myInfo);
 			tx.cb->close();
 			//}).detach();
@@ -114,7 +136,6 @@ void DataManager::routineStorage()
 	std::thread([this] {
 		for (auto & tx : *this->chan.ready) {
 			// fiber([this, tx] {
-			printf("DM: Storage ready\n");
 			TxCb myInfo;
 			myInfo.info.ptr	 = nullptr;
 			myInfo.path		 = this->pathEncode(tx.key);
@@ -122,7 +143,8 @@ void DataManager::routineStorage()
 			myInfo.ok		 = true;
 			myInfo.hit		 = true;
 
-			printf("DM: Storage ready, (%d,%d) %ld Bytes\n",
+			printf("DM: dev %d, ready, (%d,%d) %ld Bytes\n",
+				   this->ID,
 				   tx.key.idx[0],
 				   tx.key.idx[1],
 				   myInfo.info.byte);
@@ -135,7 +157,6 @@ void DataManager::routineStorage()
 	std::thread([this] {
 		for (auto & tx : *this->chan.done) {
 			// fiber([this, tx] {
-			printf("DM: Storage done\n");
 			TxCb myInfo;
 			myInfo.info.ptr	 = nullptr;
 			myInfo.info.byte = 0;
@@ -143,11 +164,14 @@ void DataManager::routineStorage()
 			myInfo.ok		 = true;
 			myInfo.hit		 = true;
 
-			printf("DM: Storage done, (%d,%d)\n", tx.key.idx[0], tx.key.idx[1]);
+			printf("DM: dev %d, done, (%d,%d) %ld Bytes\n",
+				   this->ID,
+				   tx.key.idx[0],
+				   tx.key.idx[1],
+				   myInfo.info.byte);
 			tx.cb->push(myInfo);
 			tx.cb->close();
 			//}).detach();
-			break;
 		}
 	}).detach();
 }
@@ -156,7 +180,7 @@ void DataManager::methodFind()
 {
 	std::thread([this] {
 		for (auto & tx : *this->chan.find) {
-			printf("DM: dev%d find, (%d,%d)\n", this->ID, tx.key.idx[0], tx.key.idx[1]);
+			printf("DM: dev %d find, (%d,%d)\n", this->ID, tx.key.idx[0], tx.key.idx[1]);
 			TxCb myInfo;
 			myInfo.info.ptr	 = nullptr;
 			myInfo.info.byte = 0;
@@ -180,7 +204,7 @@ void DataManager::tryAllocate(CacheKey const				 key,
 							  bool &						 iHaveLock)
 {
 	while (true) {
-		txcb.info.ptr = (Vertex32 *)(this->mem.buddy.allocate(txcb.info.byte));
+		txcb.info.ptr = (Vertex *)(this->mem.buddy.allocate(txcb.info.byte));
 
 		if (txcb.info.ptr != nullptr) {
 			this->mem.cache->insert({key, {txcb.info, 1}});
@@ -204,11 +228,13 @@ void DataManager::tryAllocate(CacheKey const				 key,
 							this->mem.buddy.deallocate(it->second.info.ptr);
 							it		= this->mem.cache->erase(it);
 							evicted = true;
+
 							printf("DM: dev %d delete, (%d,%d), %ld Bytes\n",
 								   this->ID,
 								   it->first.idx[0],
 								   it->first.idx[1],
 								   it->second.info.byte);
+
 							break;
 						} else {
 							++it;
@@ -230,13 +256,16 @@ void DataManager::tryAllocate(CacheKey const				 key,
 void DataManager::methodReady()
 {
 	std::thread([this] {
+		// printf("DM: dev %d methodREADY START\n", this->ID);
 		for (auto & tx : *this->chan.ready) {
 			TxCb txcb;
 			txcb.info.ptr  = nullptr;
 			txcb.info.byte = 0;
 			txcb.path	   = "";
 
+			// printf("DM: dev %d i got request!\n", this->ID);
 			std::unique_lock<std::mutex> ul(this->mem.cacheMtx);
+			// printf("DM: dev %d i got lock!\n", this->ID);
 
 			bool iHaveLock = true;
 
@@ -257,13 +286,17 @@ void DataManager::methodReady()
 					   txcb.info.byte);
 				txcb.hit = true;
 			} else {
+				// printf("DM: dev %d not hit! try to figure out file size!\n", this->ID);
 				txcb.info.byte = fs::file_size(pathEncode(tx.key));
 
+				// printf("DM: dev %d not hit! try to Allocate!\n", this->ID);
 				tryAllocate(tx.key, txcb, ul, iHaveLock);
 
+				// printf("DM: dev %d not hit! try to request upstream!\n", this->ID);
 				auto otherTxcb = this->upstream->reqReady(tx.key.idx, tx.key.type);
 
 				if (this->ID == -1) {
+					// printf("DM: dev %d load\n", this->ID);
 					auto fp = open64(otherTxcb.path.c_str(), O_RDONLY);
 
 					constexpr uint64_t cDef		 = (1L << 30); // chunk Default
@@ -286,11 +319,13 @@ void DataManager::methodReady()
 							   cudaMemcpyHostToDevice);
 				}
 
+				printf("DM: dev %d load done\n", this->ID);
 				if (iHaveLock) {
 					ul.unlock();
 					iHaveLock = false;
 				}
 
+				printf("DM: dev %d send to reqDone\n", this->ID);
 				this->upstream->reqDone(tx.key.idx, tx.key.type);
 
 				printf("DM: dev %d ready miss, (%d,%d) %ld Bytes\n",
@@ -304,6 +339,7 @@ void DataManager::methodReady()
 			tx.cb->push(txcb);
 			tx.cb->close();
 		}
+		printf("DM: dev %d methodREADY DONE\n", this->ID);
 	}).detach();
 }
 
@@ -359,6 +395,8 @@ DataManager::TxCb DataManager::reqReady(GridIndex32 const idx, Type const type)
 	TxCb result;
 	for (auto & res : *tx.cb) {
 		result = res;
+		// printf("DM: dev %d, reqReady: (%d,%d) GOTRESULT!!!!!!!!!!!!!!\n", this->ID, idx[0],
+		// idx[1]);
 	}
 
 	return result;
@@ -377,6 +415,7 @@ DataManager::TxCb DataManager::reqDone(GridIndex32 const idx, Type const type)
 
 	TxCb result;
 	for (auto & res : *tx.cb) {
+		// printf("DM: dev %d, reqDone: (%d,%d) finished\n", this->ID, idx[0], idx[1]);
 		result = res;
 	}
 
@@ -385,6 +424,7 @@ DataManager::TxCb DataManager::reqDone(GridIndex32 const idx, Type const type)
 
 void DataManager::closeAllChan()
 {
+	printf("DM: dev %d closeAllChan\n", this->ID);
 	this->chan.find->close();
 	this->chan.ready->close();
 	this->chan.done->close();

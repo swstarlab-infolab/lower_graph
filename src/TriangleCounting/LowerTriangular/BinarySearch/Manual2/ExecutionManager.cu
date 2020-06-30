@@ -131,7 +131,7 @@ static void Execution(Context &								ctx,
 	}
 
 	ctx.dataManagerCtx[myID].chan->close();
-	out->close();
+	// out->close();
 
 	printf("HIT: %ld, MISS: %ld, HIT/TOTAL: %lf\n",
 		   hitCount,

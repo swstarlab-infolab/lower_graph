@@ -43,6 +43,7 @@ public:
 	sp<ScheduleManager>							  SM;
 
 	void init(int argc, char * argv[]);
+	void finalize();
 };
 
 extern Context ctx; // main.cpp
