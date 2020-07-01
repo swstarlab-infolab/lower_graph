@@ -4,8 +4,11 @@
 #include "type.cuh"
 
 #include <memory>
+#include <tuple>
 
-std::shared_ptr<bchan<Command>> ScheduleManager(Context const & ctx);
+// first return = GPU channel, second return = CPU channel
+std::pair<std::shared_ptr<bchan<Command>>, std::shared_ptr<bchan<Command>>>
+ScheduleManager(Context const & ctx);
 
 void ScheduleWaiter(std::shared_ptr<bchan<CommandResult>> executionRes);
 

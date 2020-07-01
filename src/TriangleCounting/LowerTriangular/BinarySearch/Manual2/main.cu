@@ -119,9 +119,9 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
 		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
 
-		printf("myCtx.lookup.G0.ptr: %p\n", myCtx.lookup.G0.ptr);
-		printf("myCtx.lookup.G2.ptr: %p\n", myCtx.lookup.G2.ptr);
-		printf("myCtx.lookup.temp.ptr: %p\n", myCtx.lookup.temp.ptr);
+		// printf("myCtx.lookup.G0.ptr: %p\n", myCtx.lookup.G0.ptr);
+		// printf("myCtx.lookup.G2.ptr: %p\n", myCtx.lookup.G2.ptr);
+		// printf("myCtx.lookup.temp.ptr: %p\n", myCtx.lookup.temp.ptr);
 
 		cudaMemset(myCtx.lookup.temp.ptr, 0x00, myCtx.lookup.temp.byte);
 		cudaMemset(myCtx.lookup.G0.ptr, 0x00, myCtx.lookup.G0.byte);
@@ -145,6 +145,7 @@ static void init(Context & ctx, int argc, char * argv[])
 	for (int i = 0; i < 3; i++) {
 		ctx.setting[i] = strtol(argv[i + 2], nullptr, 10);
 	}
+	ctx.cpuGPUThreshold = (1 << 27); // 128MiB
 
 	// get total GPUs
 	cudaGetDeviceCount(&ctx.deviceCount);
@@ -179,10 +180,10 @@ int main(int argc, char * argv[])
 
 	for (int i = 0; i < ctx.deviceCount; i++) {
 		DataManager(ctx, i);
-		resultChan[i] = ExecutionManager(ctx, i, exeReq);
+		resultChan[i] = ExecutionManager(ctx, i, exeReq.first);
 	}
 	DataManager(ctx, -1);
-	resultChan.back() = ExecutionManager(ctx, -1, exeReq);
+	resultChan.back() = ExecutionManager(ctx, -1, exeReq.second);
 	DataManager(ctx, -2);
 	auto c = merge(resultChan);
 	ScheduleWaiter(c);

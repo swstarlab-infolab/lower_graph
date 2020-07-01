@@ -162,24 +162,17 @@ static auto resetLookupTemp(Grid & g, MemInfo<Vertex> & luTemp)
 
 Count launchKernelCPU(Context & ctx, DeviceID myID, Grids & G)
 {
-	printf("start launchKernelCPU\n");
 	auto & myCtx   = ctx.executionManagerCtx[myID];
 	auto & blocks  = ctx.setting[1];
 	auto & threads = ctx.setting[2];
 
 	genLookupTemp(G[0], myCtx.lookup.temp);
-	printf("genLookupTemp Done\n");
 	exclusiveSum(myCtx.lookup.temp, myCtx.lookup.G0);
-	printf("exclusive Sum Done\n");
 	resetLookupTemp(G[0], myCtx.lookup.temp);
-	printf("resetLookupTemp Done\n");
 
 	genLookupTemp(G[2], myCtx.lookup.temp);
-	printf("genLookupTemp Done\n");
 	exclusiveSum(myCtx.lookup.temp, myCtx.lookup.G2);
-	printf("exclusive Sum Done\n");
 	resetLookupTemp(G[2], myCtx.lookup.temp);
-	printf("resetLookupTemp Done\n");
 
 	return kernel(G, myCtx.lookup.G0.ptr, myCtx.lookup.G2.ptr, myCtx.count.ptr);
 }

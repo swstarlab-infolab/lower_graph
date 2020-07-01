@@ -1,17 +1,19 @@
 #include "ScheduleManager.cuh"
 #include "make.cuh"
 #include "type.cuh"
+#include "util.h"
 
 #include <memory>
 #include <thread>
 #include <vector>
 
-std::shared_ptr<bchan<Command>> ScheduleManager(Context const & ctx)
+std::pair<std::shared_ptr<bchan<Command>>, std::shared_ptr<bchan<Command>>>
+ScheduleManager(Context const & ctx)
 {
-	// auto out = make<bchan<Command>>(1 << 4);
-	auto out = std::make_shared<bchan<Command>>(1 << 4);
+	auto outGPU = std::make_shared<bchan<Command>>(1 << 4);
+	auto outCPU = std::make_shared<bchan<Command>>(1 << 4);
 
-	std::thread([&, out] {
+	std::thread([&, outGPU, outCPU] {
 		auto const MAXROW = ctx.meta.info.count.row;
 
 		for (uint32_t row = 0; row < MAXROW; row++) {
@@ -19,15 +21,51 @@ std::shared_ptr<bchan<Command>> ScheduleManager(Context const & ctx)
 				for (uint32_t i = col; i <= row; i++) {
 					Command req;
 					req.gidx = {{{i, col}, {row, col}, {row, i}}};
-					out.get()->push(req);
+
+					std::array<size_t, 3> fbyte = {
+						0,
+					};
+
+					for (int j = 0; j < 3; j++) {
+						auto fpath = ctx.folderPath / filenameEncode(req.gidx[j]);
+						fbyte[j]   = size_t(fs::file_size(fs::path(fpath.string() + ".row"))) +
+								   size_t(fs::file_size(fs::path(fpath.string() + ".ptr"))) +
+								   size_t(fs::file_size(fs::path(fpath.string() + ".col")));
+					}
+
+					printf("SM: (%3d,%3d) %ld Bytes, (%3d,%3d) %ld Bytes, (%3d,%3d) %ld Bytes",
+						   i,
+						   col,
+						   fbyte[0],
+						   row,
+						   col,
+						   fbyte[1],
+						   row,
+						   i,
+						   fbyte[2]);
+
+					if (ctx.deviceCount > 0) {
+						if (fbyte[0] < ctx.cpuGPUThreshold && fbyte[1] < ctx.cpuGPUThreshold &&
+							fbyte[2] < ctx.cpuGPUThreshold) {
+							printf(" -> CPU\n");
+							outCPU->push(req);
+						} else {
+							printf(" -> GPU\n");
+							outGPU->push(req);
+						}
+					} else {
+						printf(" -> CPU\n");
+						outCPU->push(req);
+					}
 				}
 			}
 		}
 
-		out.get()->close();
+		outGPU->close();
+		outCPU->close();
 	}).detach();
 
-	return out;
+	return std::make_pair(outGPU, outCPU);
 }
 
 void ScheduleWaiter(std::shared_ptr<bchan<CommandResult>> executionRes)
@@ -35,9 +73,9 @@ void ScheduleWaiter(std::shared_ptr<bchan<CommandResult>> executionRes)
 	Count  totalTriangles	= 0;
 	double totalElapsedTime = 0.0;
 
-	for (auto & res : *executionRes.get()) {
+	for (auto & res : *executionRes) {
 		fprintf(stdout,
-				"RESULT: DEV %d (%3d,%3d)(%3d,%3d)(%3d,%3d)=%16lld,%16.6lf(sec)\n",
+				"Result: Device %2d (%3d,%3d)(%3d,%3d)(%3d,%3d)=%16lld,%16.6lf(sec)\n",
 				res.deviceID,
 				res.gidx[0][0],
 				res.gidx[0][1],

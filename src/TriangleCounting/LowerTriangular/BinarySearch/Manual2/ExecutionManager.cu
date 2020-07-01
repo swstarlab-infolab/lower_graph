@@ -62,33 +62,35 @@ static void Execution(Context &								ctx,
 			}
 		}
 
-		printf("Kernel Start:\n"
-			   "(%d,%d):[%s,%s,%s]\n"
-			   "(%d,%d):[%s,%s,%s]\n"
-			   "(%d,%d):[%s,%s,%s]\n",
-			   req.gidx[0][0],
-			   req.gidx[0][1],
-			   memInfo[0][0].print().c_str(),
-			   memInfo[0][1].print().c_str(),
-			   memInfo[0][2].print().c_str(),
-			   req.gidx[1][0],
-			   req.gidx[1][1],
-			   memInfo[1][0].print().c_str(),
-			   memInfo[1][1].print().c_str(),
-			   memInfo[1][2].print().c_str(),
-			   req.gidx[2][0],
-			   req.gidx[2][1],
-			   memInfo[2][0].print().c_str(),
-			   memInfo[2][1].print().c_str(),
-			   memInfo[2][2].print().c_str());
+		/*
+				printf("Kernel Start:\n"
+					   "(%d,%d):[%s,%s,%s]\n"
+					   "(%d,%d):[%s,%s,%s]\n"
+					   "(%d,%d):[%s,%s,%s]\n",
+					   req.gidx[0][0],
+					   req.gidx[0][1],
+					   memInfo[0][0].print().c_str(),
+					   memInfo[0][1].print().c_str(),
+					   memInfo[0][2].print().c_str(),
+					   req.gidx[1][0],
+					   req.gidx[1][1],
+					   memInfo[1][0].print().c_str(),
+					   memInfo[1][1].print().c_str(),
+					   memInfo[1][2].print().c_str(),
+					   req.gidx[2][0],
+					   req.gidx[2][1],
+					   memInfo[2][0].print().c_str(),
+					   memInfo[2][1].print().c_str(),
+					   memInfo[2][2].print().c_str());
+					   */
 
 		Count myTriangle = 0;
 		// LAUNCH
 		if (myID > -1) {
-			printf("kernel launch on gpu %d\n", myID);
+			// printf("kernel launch on gpu %d\n", myID);
 			myTriangle = launchKernelGPU(ctx, myID, memInfo);
 		} else {
-			printf("kernel launch on cpu %d\n", myID);
+			// printf("kernel launch on cpu %d\n", myID);
 			myTriangle = launchKernelCPU(ctx, myID, memInfo);
 		}
 
@@ -135,7 +137,8 @@ static void Execution(Context &								ctx,
 	// ctx.dataManagerCtx[myID].chan->close();
 	out->close();
 
-	printf("HIT: %ld, MISS: %ld, HIT/TOTAL: %lf\n",
+	printf("Device: %d, Hit: %ld, Miss: %ld, Hit/Total: %lf\n",
+		   myID,
 		   hitCount,
 		   missCount,
 		   double(hitCount) / double(hitCount + missCount));

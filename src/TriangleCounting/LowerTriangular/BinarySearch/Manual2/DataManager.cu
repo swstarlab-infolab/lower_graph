@@ -161,7 +161,7 @@ static auto methodReady(Context & ctx, DeviceID myID)
 {
 	auto in = std::make_shared<bchan<Tx>>(16);
 	std::thread([&, myID, in] {
-		printf("methodReady start at dev %d\n", myID);
+		// printf("methodReady start at dev %d\n", myID);
 
 		for (auto & tx : *in) {
 			auto & myCtx = ctx.dataManagerCtx[myID];
@@ -170,22 +170,19 @@ static auto methodReady(Context & ctx, DeviceID myID)
 				0,
 			};
 
-			printf("allright dev %d got some request\n", myID);
+			// printf("allright dev %d got some request\n", myID);
 
 			std::unique_lock<std::mutex> ul(*myCtx.cacheMtx);
-			printf("allright dev %d got mutex\n", myID);
+			// printf("allright dev %d got mutex\n", myID);
 
 			bool iHaveLock = true;
 
 			if (myCtx.cache->find(tx.key) != myCtx.cache->end()) {
-				printf("[%2d] %s Hit!\n", myID, tx.key.print().c_str());
+				// printf("[%2d] %s Hit!\n", myID, tx.key.print().c_str());
 				myInfo = myCtx.cache->at(tx.key).info;
 				myCtx.cache->at(tx.key).refCnt += 1;
-				printf("[%2d] %s Hit  %d -> %d\n",
-					   myID,
-					   tx.key.print().c_str(),
-					   myCtx.cache->at(tx.key).refCnt - 1,
-					   myCtx.cache->at(tx.key).refCnt);
+				// printf("[%2d] %s Hit  %d -> %d\n", myID, tx.key.print().c_str(),
+				// myCtx.cache->at(tx.key).refCnt - 1, myCtx.cache->at(tx.key).refCnt);
 
 				if (iHaveLock) {
 					ul.unlock();
@@ -194,7 +191,7 @@ static auto methodReady(Context & ctx, DeviceID myID)
 
 				myInfo.hit = true;
 			} else {
-				printf("[%2d] %s Miss!\n", myID, tx.key.print().c_str());
+				// printf("[%2d] %s Miss!\n", myID, tx.key.print().c_str());
 
 				myInfo.byte = fs::file_size(genPath(ctx, tx.key));
 
@@ -204,12 +201,12 @@ static auto methodReady(Context & ctx, DeviceID myID)
 				auto otherInfo = requestToReady(ctx, tx.key, targetID);
 
 				if (myID == -1) {
-					printf("start to read!\n");
-					printf("%p\n", myInfo.ptr);
-					printf("otherInfo.path.c_str(): %s\n", otherInfo.path.c_str());
+					// printf("start to read!\n");
+					// printf("%p\n", myInfo.ptr);
+					// printf("otherInfo.path.c_str(): %s\n", otherInfo.path.c_str());
 					auto fp = open64(otherInfo.path.c_str(), O_RDONLY);
 					if (fp < 0) {
-						printf("error = %s(%d)\n", strerror(errno), errno);
+						// printf("error = %s(%d)\n", strerror(errno), errno);
 						exit(EXIT_FAILURE);
 					}
 
@@ -220,15 +217,13 @@ static auto methodReady(Context & ctx, DeviceID myID)
 						chunkByte =
 							(myInfo.byte - bytePos > chunkByte) ? chunkByte : myInfo.byte - bytePos;
 
-						printf("cbyte bytePos/myInfo.byte = %ld %ld/%ld\n",
-							   chunkByte,
-							   bytePos,
-							   myInfo.byte);
+						// printf("cbyte bytePos/myInfo.byte = %ld %ld/%ld\n", chunkByte, bytePos,
+						// myInfo.byte);
 						auto loaded =
 							pread(fp, &(((uint8_t *)myInfo.ptr)[bytePos]), chunkByte, bytePos);
 
 						if (loaded < 0) {
-							printf("error = %s(%d)\n", strerror(errno), errno);
+							// printf("error = %s(%d)\n", strerror(errno), errno);
 							exit(EXIT_FAILURE);
 						}
 
@@ -244,7 +239,7 @@ static auto methodReady(Context & ctx, DeviceID myID)
 					cudaMemcpy(myInfo.ptr, otherInfo.ptr, otherInfo.byte, cudaMemcpyHostToDevice);
 				}
 
-				printf("[%2d] %s Memcpy/Read complete\n", myID, tx.key.print().c_str());
+				// printf("[%2d] %s Memcpy/Read complete\n", myID, tx.key.print().c_str());
 
 				if (iHaveLock) {
 					ul.unlock();
@@ -279,7 +274,7 @@ void DataManager(Context & ctx, DeviceID myID)
 		// Storage
 		std::thread([&, myID] {
 			for (auto & tx : *ctx.dataManagerCtx[myID].chan) {
-				printf("Storage: I got something!\n");
+				// printf("Storage: I got something!\n");
 				switch (tx.method) {
 				case Method::Find:
 					fiber([&, myID, tx] {

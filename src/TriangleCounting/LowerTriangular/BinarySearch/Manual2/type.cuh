@@ -181,6 +181,7 @@ struct Context {
 	int					  deviceCount = 0; // device count
 	std::array<size_t, 3> setting;		   // setting (cudaStreams, cudaBlocks, cudaThreads)
 	GridCSR::MetaData	  meta;			   // Grid metadata
+	size_t				  cpuGPUThreshold; // cpu/gpu job dividing threshold
 
 	std::unordered_map<DeviceID, DataManagerContext>	  dataManagerCtx;
 	std::unordered_map<DeviceID, ExecutionManagerContext> executionManagerCtx;
