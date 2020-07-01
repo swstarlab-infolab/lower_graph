@@ -23,6 +23,9 @@ auto makeArray(Args &&... args)
 }
 */
 
+int lock_memory(char * addr, size_t size);
+int unlock_memory(char * addr, size_t size);
+
 template <typename ChanType>
 auto merge(std::vector<std::shared_ptr<ChanType>> & v)
 {
@@ -70,24 +73,38 @@ std::shared_ptr<Type> allocCUDA(size_t const count)
 		});
 }
 
-template <>
-std::shared_ptr<void> allocCUDA<void>(size_t const byte);
-
 template <typename Type>
 std::shared_ptr<Type> allocHost(size_t const count)
 {
 	return std::shared_ptr<Type>(
 		[&] {
 			Type * p;
-			cudaHostAlloc((void **)&p, count * sizeof(Type), cudaHostAllocPortable);
+			int	   devices = 0;
+			cudaGetDeviceCount(&devices);
+			if (devices) {
+				cudaHostAlloc((void **)&p, count * sizeof(Type), cudaHostAllocPortable);
+			} else {
+				p = malloc(count * sizeof(Type));
+				lock_memory(p, count * sizeof(Type));
+			}
 			return p;
 		}(),
-		[](Type * p) {
+		[count](Type * p) {
 			if (p != nullptr) {
-				cudaFree(p);
+				int devices = 0;
+				cudaGetDeviceCount(&devices);
+				if (devices) {
+					cudaFree(p);
+				} else {
+					unlock_memory(p, count * sizeof(Type));
+					free(p);
+				}
 			}
 		});
 }
+
+template <>
+std::shared_ptr<void> allocCUDA<void>(size_t const byte);
 
 template <>
 std::shared_ptr<void> allocHost<void>(size_t const byte);

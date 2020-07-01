@@ -177,10 +177,10 @@ struct ExecutionManagerContext {
 };
 
 struct Context {
-	fs::path			  folderPath;		// folder path
-	int					  deviceCount = -1; // device count
-	std::array<size_t, 3> setting;			// setting (cudaStreams, cudaBlocks, cudaThreads)
-	GridCSR::MetaData	  meta;				// Grid metadata
+	fs::path			  folderPath;	   // folder path
+	int					  deviceCount = 0; // device count
+	std::array<size_t, 3> setting;		   // setting (cudaStreams, cudaBlocks, cudaThreads)
+	GridCSR::MetaData	  meta;			   // Grid metadata
 
 	std::unordered_map<DeviceID, DataManagerContext>	  dataManagerCtx;
 	std::unordered_map<DeviceID, ExecutionManagerContext> executionManagerCtx;

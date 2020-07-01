@@ -20,8 +20,10 @@ static void Execution(Context &								ctx,
 		// PREPARE
 		auto start = std::chrono::system_clock::now();
 
-		Grids								memInfo;
+		Grids memInfo;
+
 		std::array<std::array<fiber, 3>, 3> waitGroup;
+
 		for (uint32_t i = 0; i < 3; i++) {
 			for (uint32_t type = 0; type < 3; type++) {
 				waitGroup[i][type] = fiber([&, myID, i, type] {
@@ -60,35 +62,35 @@ static void Execution(Context &								ctx,
 			}
 		}
 
+		printf("Kernel Start:\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n",
+			   req.gidx[0][0],
+			   req.gidx[0][1],
+			   memInfo[0][0].print().c_str(),
+			   memInfo[0][1].print().c_str(),
+			   memInfo[0][2].print().c_str(),
+			   req.gidx[1][0],
+			   req.gidx[1][1],
+			   memInfo[1][0].print().c_str(),
+			   memInfo[1][1].print().c_str(),
+			   memInfo[1][2].print().c_str(),
+			   req.gidx[2][0],
+			   req.gidx[2][1],
+			   memInfo[2][0].print().c_str(),
+			   memInfo[2][1].print().c_str(),
+			   memInfo[2][2].print().c_str());
+
 		Count myTriangle = 0;
 		// LAUNCH
 		if (myID > -1) {
+			printf("kernel launch on gpu %d\n", myID);
 			myTriangle = launchKernelGPU(ctx, myID, memInfo);
 		} else {
+			printf("kernel launch on cpu %d\n", myID);
 			myTriangle = launchKernelCPU(ctx, myID, memInfo);
 		}
-
-		/*
-				printf("Kernel End:\n"
-					   "(%d,%d):[%s,%s,%s]\n"
-					   "(%d,%d):[%s,%s,%s]\n"
-					   "(%d,%d):[%s,%s,%s]\n",
-					   req.gidx[0][0],
-					   req.gidx[0][1],
-					   memInfo[0][0].print().c_str(),
-					   memInfo[0][1].print().c_str(),
-					   memInfo[0][2].print().c_str(),
-					   req.gidx[1][0],
-					   req.gidx[1][1],
-					   memInfo[1][0].print().c_str(),
-					   memInfo[1][1].print().c_str(),
-					   memInfo[1][2].print().c_str(),
-					   req.gidx[2][0],
-					   req.gidx[2][1],
-					   memInfo[2][0].print().c_str(),
-					   memInfo[2][1].print().c_str(),
-					   memInfo[2][2].print().c_str());
-					   */
 
 		auto end = std::chrono::system_clock::now();
 
@@ -130,8 +132,8 @@ static void Execution(Context &								ctx,
 		out->push(res);
 	}
 
-	ctx.dataManagerCtx[myID].chan->close();
-	// out->close();
+	// ctx.dataManagerCtx[myID].chan->close();
+	out->close();
 
 	printf("HIT: %ld, MISS: %ld, HIT/TOTAL: %lf\n",
 		   hitCount,

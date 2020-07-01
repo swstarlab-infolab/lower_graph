@@ -20,17 +20,20 @@ static void DataManagerInit(Context & ctx, int myID)
 
 	auto & myMem = ctx.dataManagerCtx[myID];
 
-	printf("Start to initialize Device: %d\n", myID);
+	printf("Start to initialize DataManager: %d\n", myID);
 	if (myID > -1) {
 		// GPU Memory
 		size_t freeMem;
 		cudaSetDevice(myID);
 		cudaMemGetInfo(&freeMem, nullptr);
 		freeMem -= (1L << 29);
+
 		cudaSetDevice(myID);
-		myMem.buf	= allocCUDA<void>(freeMem);
+		myMem.buf = allocCUDA<void>(freeMem);
+
 		myMem.buddy = std::make_shared<portable_buddy_system>();
 		myMem.buddy.get()->init(memrgn_t{myMem.buf.get(), freeMem}, 256, 1);
+
 		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
 		myMem.conn.get()->upstream = -1;
 		for (int32_t i = 0; i < ctx.deviceCount; i++) {
@@ -39,7 +42,8 @@ static void DataManagerInit(Context & ctx, int myID)
 			}
 		}
 
-		myMem.chan	= std::make_shared<bchan<Tx>>(16);
+		myMem.chan = std::make_shared<bchan<Tx>>(16);
+
 		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
 		myMem.cacheMtx = std::make_shared<std::mutex>();
 	} else if (myID == -1) {
@@ -49,21 +53,26 @@ static void DataManagerInit(Context & ctx, int myID)
 		myMem.buf	   = allocHost<void>(freeMem);
 		myMem.buddy	   = std::make_shared<portable_buddy_system>();
 		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
+
 		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
 		myMem.conn.get()->upstream = -2;
-		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
+
+		myMem.chan = std::make_shared<bchan<Tx>>(16);
+
 		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
 		myMem.cacheMtx = std::make_shared<std::mutex>();
 	} else {
 		// Storage
 		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
 		myMem.conn.get()->upstream = -2;
-		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
+
+		myMem.chan = std::make_shared<bchan<Tx>>(16);
 	}
 }
 
 static void ExecutionManagerInit(Context & ctx, int myID)
 {
+	printf("Start to initialize ExecutionManager: %d\n", myID);
 	if (myID > -1) {
 		// GPU
 		auto const GridWidth = ctx.meta.info.width.row;
@@ -110,15 +119,17 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
 		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
 
-		memset(myCtx.lookup.temp.ptr, 0, myCtx.lookup.temp.byte);
-		memset(myCtx.lookup.G0.ptr, 0, myCtx.lookup.G0.byte);
-		memset(myCtx.lookup.G2.ptr, 0, myCtx.lookup.G2.byte);
+		printf("myCtx.lookup.G0.ptr: %p\n", myCtx.lookup.G0.ptr);
+		printf("myCtx.lookup.G2.ptr: %p\n", myCtx.lookup.G2.ptr);
+		printf("myCtx.lookup.temp.ptr: %p\n", myCtx.lookup.temp.ptr);
 
-		myCtx.count.byte = sizeof(Count);
-		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
+		cudaMemset(myCtx.lookup.temp.ptr, 0x00, myCtx.lookup.temp.byte);
+		cudaMemset(myCtx.lookup.G0.ptr, 0x00, myCtx.lookup.G0.byte);
+		cudaMemset(myCtx.lookup.G2.ptr, 0x00, myCtx.lookup.G2.byte);
 
 		ctx.executionManagerCtx.insert({myID, myCtx});
 	}
+	printf("End to initialize ExecutionManager: %d\n", myID);
 }
 
 static void init(Context & ctx, int argc, char * argv[])
@@ -146,6 +157,7 @@ static void init(Context & ctx, int argc, char * argv[])
 		ExecutionManagerInit(ctx, i);
 	}
 	DataManagerInit(ctx, -1); // CPU
+	ExecutionManagerInit(ctx, -1);
 	DataManagerInit(ctx, -2); // Storage
 }
 
@@ -161,6 +173,8 @@ int main(int argc, char * argv[])
 
 	auto exeReq = ScheduleManager(ctx);
 
+	printf("ctx.deviceCount=%d\n", ctx.deviceCount);
+
 	std::vector<ResultChanPtr> resultChan(ctx.deviceCount + 1);
 
 	for (int i = 0; i < ctx.deviceCount; i++) {
@@ -168,7 +182,7 @@ int main(int argc, char * argv[])
 		resultChan[i] = ExecutionManager(ctx, i, exeReq);
 	}
 	DataManager(ctx, -1);
-	resultChan[resultChan.size()] = ExecutionManager(ctx, -1, exeReq);
+	resultChan.back() = ExecutionManager(ctx, -1, exeReq);
 	DataManager(ctx, -2);
 	auto c = merge(resultChan);
 	ScheduleWaiter(c);
