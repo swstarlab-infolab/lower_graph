@@ -1,4 +1,4 @@
-set(outFileName Adj6ToCSR-Phase2)
+set(outFileName Adj6ToGCSR-lt-Phase2)
 
 file(GLOB_RECURSE files ${CMAKE_CURRENT_SOURCE_DIR}/*)
 add_executable(${outFileName} ${files})

@@ -1,5 +1,5 @@
 add_subdirectory(Manual)
-add_subdirectory(ManualWithCPU)
+#add_subdirectory(ManualWithCPU)
 add_subdirectory(Manual2)
 add_subdirectory(NVLink)
 add_subdirectory(Original)

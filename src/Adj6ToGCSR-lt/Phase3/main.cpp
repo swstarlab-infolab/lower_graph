@@ -1,7 +1,6 @@
 #include "../main.h"
 
-#include "../GridCSR.h"
-
+#include <GridCSR/GridCSR.h>
 #include <chrono>
 
 static void routine(Context const & ctx)

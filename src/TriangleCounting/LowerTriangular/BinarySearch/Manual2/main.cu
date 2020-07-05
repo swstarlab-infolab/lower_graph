@@ -49,9 +49,10 @@ static void DataManagerInit(Context & ctx, int myID)
 	} else if (myID == -1) {
 		// CPU Memory
 		// size_t freeMem = (1L << 37); // 128GB
-		size_t freeMem = (1L << 32); // 4GB
-		myMem.buf	   = allocHost<void>(freeMem);
-		myMem.buddy	   = std::make_shared<portable_buddy_system>();
+		size_t freeMem = (1L << 36); // 64GB
+		// size_t freeMem = (1L << 32); // 4GB
+		myMem.buf	= allocHost<void>(freeMem);
+		myMem.buddy = std::make_shared<portable_buddy_system>();
 		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
 
 		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
@@ -145,7 +146,6 @@ static void init(Context & ctx, int argc, char * argv[])
 	for (int i = 0; i < 3; i++) {
 		ctx.setting[i] = strtol(argv[i + 2], nullptr, 10);
 	}
-	ctx.cpuGPUThreshold = (1 << 27); // 128MiB
 
 	// get total GPUs
 	cudaGetDeviceCount(&ctx.deviceCount);
@@ -176,14 +176,17 @@ int main(int argc, char * argv[])
 
 	printf("ctx.deviceCount=%d\n", ctx.deviceCount);
 
-	std::vector<ResultChanPtr> resultChan(ctx.deviceCount + 1);
+	auto const				   CPUEMs = 4;
+	std::vector<ResultChanPtr> resultChan(ctx.deviceCount + CPUEMs);
 
 	for (int i = 0; i < ctx.deviceCount; i++) {
 		DataManager(ctx, i);
 		resultChan[i] = ExecutionManager(ctx, i, exeReq.first);
 	}
 	DataManager(ctx, -1);
-	resultChan.back() = ExecutionManager(ctx, -1, exeReq.second);
+	for (int pos = ctx.deviceCount; pos < resultChan.size(); pos++) {
+		resultChan[pos] = ExecutionManager(ctx, -1, exeReq.second);
+	}
 	DataManager(ctx, -2);
 	auto c = merge(resultChan);
 	ScheduleWaiter(c);

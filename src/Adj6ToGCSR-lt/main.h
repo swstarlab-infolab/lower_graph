@@ -50,6 +50,24 @@ using GridAndEdge	  = std::pair<GridIndex32, Edge32>;
 using GridAndEdgeList = std::vector<GridAndEdge>;
 using EdgeList32	  = std::vector<Edge32>;
 
+/*
+struct KeyHash {
+	std::size_t operator()(GridIndex32 const & k) const
+	{
+		auto a = std::hash<uint64_t>{}(uint64_t(k[0]) << 32);
+		auto b = std::hash<uint64_t>{}(uint64_t(k[1]));
+		return a ^ b;
+	}
+};
+
+struct KeyEqual {
+	bool operator()(GridIndex32 const & kl, GridIndex32 const & kr) const
+	{
+		return (kl[0] == kr[0] && kl[1] == kr[1]);
+	}
+};
+*/
+
 struct Context {
 	fs::path	inFolder;
 	fs::path	outFolder;
@@ -82,6 +100,11 @@ auto load(fs::path inFile)
 	close(fp);
 
 	return out;
+}
+
+auto filenameEncode(GridIndex32 in)
+{
+	return std::to_string(in[0]) + __FilenameDelimiter + std::to_string(in[1]);
 }
 
 auto filenameDecode(std::string const & in)

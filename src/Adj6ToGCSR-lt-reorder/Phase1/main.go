@@ -48,6 +48,14 @@ func edge32SliceToByteSlice(in []edge32) []byte {
 	return *(*[]byte)(unsafe.Pointer(&header))
 }
 
+func byteSliceToUint64Slice(in []byte) []uint64 {
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&in))
+	header.Len = len(in) / 8
+	header.Cap = len(in) / 8
+
+	return *(*[]uint64)(unsafe.Pointer(&header))
+}
+
 func convBE6toLE8(in []uint8) uint64 {
 	var temp uint64 = 0
 	temp |= uint64(in[0])
@@ -90,7 +98,7 @@ func loader(path string) []uint8 {
 		log.Panicln(err)
 	}
 
-	file, err := os.Open(path)
+	file, err := os.OpenFile(path, os.O_RDONLY, 0644)
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -132,7 +140,7 @@ func splitter(adj6 []uint8) <-chan sRawDat {
 	return out
 }
 
-func mapper(adj6 []uint8, in <-chan sRawDat) <-chan []gridEdge {
+func mapper(adj6 []uint8, reorderFile []uint64, in <-chan sRawDat) <-chan []gridEdge {
 	out := make(chan []gridEdge, 128)
 	go func() {
 		defer close(out)
@@ -141,9 +149,9 @@ func mapper(adj6 []uint8, in <-chan sRawDat) <-chan []gridEdge {
 			selfloop := uint64(0)
 
 			for i := uint64(0); i < dat.cnt; i++ {
-				s := dat.src
+				s := reorderFile[dat.src]
 				now := dat.dstStart + i*wordByte
-				d := convBE6toLE8(adj6[now : now+wordByte])
+				d := reorderFile[convBE6toLE8(adj6[now:now+wordByte])]
 
 				if s < d {
 					s, d = d, s
@@ -236,6 +244,8 @@ func routine() {
 
 	var wg sync.WaitGroup
 
+	reorderFile := byteSliceToUint64Slice(loader(ctx.Value("reorderFile").(string)))
+
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func(in <-chan string) {
@@ -249,13 +259,13 @@ func routine() {
 				data := loader(file)
 				splitPos := splitter(data)
 				for i := 0; i < shufflers; i++ {
-					mapped := mapper(data, splitPos)
+					mapped := mapper(data, reorderFile, splitPos)
 					shuffler(mapped, &wgShuffler, targetFolder)
 				}
 
 				wgShuffler.Wait()
 
-				log.Println("Phase 1 (Adj6->Edgelist)", file, "Finished")
+				log.Println(file, "Finished")
 			}
 		}(files)
 	}
@@ -265,28 +275,32 @@ func routine() {
 
 func init() {
 	inFolder := flag.String("in.folder", "", "Input Folder")
+	reorderFile := flag.String("reorder.file", "", "Reorder table file")
 	outFolder := flag.String("out.folder", "", "Output Folder")
 	outName := flag.String("out.name", "", "Output Name")
 	flag.Parse()
 
-	if len(*inFolder) == 0 || len(*outFolder) == 0 || len(*outName) == 0 {
+	if len(*inFolder) == 0 || len(*outFolder) == 0 || len(*outName) == 0 || len(*reorderFile) == 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	ctx = context.WithValue(ctx, "inFolder", *inFolder)
+	ctx = context.WithValue(ctx, "reorderFile", *reorderFile)
 	ctx = context.WithValue(ctx, "outFolder", *outFolder)
 	ctx = context.WithValue(ctx, "outName", *outName)
 }
 
+func stopwatch(msg string, f func()) {
+	log.Println("[Start        ]", msg)
+	start := time.Now()
+	f()
+	elapsed := time.Since(start).Seconds()
+	log.Printf("[End %.6fs] %v\n", elapsed, msg)
+}
+
 func main() {
-	{
-		log.Println("Phase 1 (Adj6->Edgelist) Start")
-		start := time.Now()
-
+	stopwatch("Phase 0 (Adj6->Edgelist)", func() {
 		routine()
-
-		elapsed := time.Since(start).Seconds()
-		log.Println("Phase 1 (Adj6->Edgelist) Complete, Elapsed Time:", elapsed, "(sec)")
-	}
+	})
 }

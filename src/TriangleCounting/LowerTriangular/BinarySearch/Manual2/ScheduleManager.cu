@@ -7,13 +7,65 @@
 #include <thread>
 #include <vector>
 
+// if true, cpu kernel runs.
+static auto criteria(std::array<std::array<size_t, 3>, 3> const & fbyte)
+{
+	// size constraint
+	bool Aa = (fbyte[0][0] < ((1 << 20) * sizeof(Vertex)));
+	bool Ab = (fbyte[1][0] < ((1 << 21) * sizeof(Vertex)));
+	bool Ac = (fbyte[2][0] < ((1 << 20) * sizeof(Vertex)));
+
+	// ratio constraint
+	//	bool B = ((double(fbyte[2][2]) / double(fbyte[2][0])) < 2.5);
+	bool B = true;
+	// bool C = ((double(fbyte[0][2]) / double(fbyte[0][0])) < 2.5);
+	bool C = true;
+
+	return Aa && Ab && Ac && B && C;
+	// fbyte[0] < ctx.cpuGPUThreshold && fbyte[1] < ctx.cpuGPUThreshold && fbyte[2] <
+	// ctx.cpuGPUThreshold);
+}
+
 std::pair<std::shared_ptr<bchan<Command>>, std::shared_ptr<bchan<Command>>>
 ScheduleManager(Context const & ctx)
 {
 	auto outGPU = std::make_shared<bchan<Command>>(1 << 4);
+
+	if (ctx.deviceCount > 0) {
+		std::thread([&, outGPU] {
+			auto const MAXROW = ctx.meta.info.count.row;
+
+			for (uint32_t row = 0; row < MAXROW; row++) {
+				for (uint32_t col = 0; col <= row; col++) {
+					for (uint32_t i = col; i <= row; i++) {
+						Command req;
+						req.gidx = {{{i, col}, {row, col}, {row, i}}};
+
+						std::array<std::array<size_t, 3>, 3> fbyte = {
+							0,
+						};
+
+						for (int j = 0; j < 3; j++) {
+							auto fpath	= ctx.folderPath / filenameEncode(req.gidx[j]);
+							fbyte[j][0] = size_t(fs::file_size(fs::path(fpath.string() + ".row")));
+							fbyte[j][1] = size_t(fs::file_size(fs::path(fpath.string() + ".ptr")));
+							fbyte[j][2] = size_t(fs::file_size(fs::path(fpath.string() + ".col")));
+						}
+
+						if (!criteria(fbyte)) {
+							outGPU->push(req);
+						}
+					}
+				}
+			}
+
+			outGPU->close();
+		}).detach();
+	}
+
 	auto outCPU = std::make_shared<bchan<Command>>(1 << 4);
 
-	std::thread([&, outGPU, outCPU] {
+	std::thread([&, outCPU] {
 		auto const MAXROW = ctx.meta.info.count.row;
 
 		for (uint32_t row = 0; row < MAXROW; row++) {
@@ -22,46 +74,28 @@ ScheduleManager(Context const & ctx)
 					Command req;
 					req.gidx = {{{i, col}, {row, col}, {row, i}}};
 
-					std::array<size_t, 3> fbyte = {
+					std::array<std::array<size_t, 3>, 3> fbyte = {
 						0,
 					};
 
 					for (int j = 0; j < 3; j++) {
-						auto fpath = ctx.folderPath / filenameEncode(req.gidx[j]);
-						fbyte[j]   = size_t(fs::file_size(fs::path(fpath.string() + ".row"))) +
-								   size_t(fs::file_size(fs::path(fpath.string() + ".ptr"))) +
-								   size_t(fs::file_size(fs::path(fpath.string() + ".col")));
+						auto fpath	= ctx.folderPath / filenameEncode(req.gidx[j]);
+						fbyte[j][0] = size_t(fs::file_size(fs::path(fpath.string() + ".row")));
+						fbyte[j][1] = size_t(fs::file_size(fs::path(fpath.string() + ".ptr")));
+						fbyte[j][2] = size_t(fs::file_size(fs::path(fpath.string() + ".col")));
 					}
 
-					printf("SM: (%3d,%3d) %ld Bytes, (%3d,%3d) %ld Bytes, (%3d,%3d) %ld Bytes",
-						   i,
-						   col,
-						   fbyte[0],
-						   row,
-						   col,
-						   fbyte[1],
-						   row,
-						   i,
-						   fbyte[2]);
-
 					if (ctx.deviceCount > 0) {
-						if (fbyte[0] < ctx.cpuGPUThreshold && fbyte[1] < ctx.cpuGPUThreshold &&
-							fbyte[2] < ctx.cpuGPUThreshold) {
-							printf(" -> CPU\n");
+						if (criteria(fbyte)) {
 							outCPU->push(req);
-						} else {
-							printf(" -> GPU\n");
-							outGPU->push(req);
 						}
 					} else {
-						printf(" -> CPU\n");
 						outCPU->push(req);
 					}
 				}
 			}
 		}
 
-		outGPU->close();
 		outCPU->close();
 	}).detach();
 
