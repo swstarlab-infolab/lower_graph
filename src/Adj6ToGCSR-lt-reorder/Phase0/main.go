@@ -327,6 +327,8 @@ func subroutineB(rSlice *[]reorder) {
 }
 
 func subroutineC(rSlice *[]reorder) {
+	sorty.Mxg = uint32(runtime.NumCPU())
+
 	var comp func(i, j int) bool
 
 	switch ctx.Value("reorderType").(int) {
