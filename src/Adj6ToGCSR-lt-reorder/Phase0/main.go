@@ -327,6 +327,8 @@ func subroutineB(rSlice *[]reorder) {
 }
 
 func subroutineC(rSlice *[]reorder) {
+	sorty.Mxg = uint32(runtime.NumCPU())
+
 	var comp func(i, j int) bool
 
 	switch ctx.Value("reorderType").(int) {
@@ -396,16 +398,15 @@ func subroutineC(rSlice *[]reorder) {
 }
 
 func subroutineD(rSlice *[]reorder) {
-	inter := reorderSliceToUint64Slice(*rSlice)
-	for i := 0; i < len(inter); i++ {
-		if i%2 == 1 {
-			inter[i/2] = inter[i]
-		}
+	out2 := make([]uint64, len(*rSlice))
+	for i, v := range *rSlice {
+		out2[i] = v.val
 	}
 
-	inter = inter[:len(inter)/2]
+	//inter = inter[:len(inter)/2]
 
-	out := uint64SliceToByteSlice(inter)
+	out := uint64SliceToByteSlice(out2)
+
 	outFilePath := ctx.Value("outFile").(string)
 	outFileFolder, _ := filepath.Split(outFilePath)
 	os.MkdirAll(outFileFolder, 0755)

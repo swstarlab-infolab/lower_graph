@@ -1,4 +1,4 @@
-set(outFileName Adj6ToEL32-Phase1)
+set(outFileName Adj6ToGCSR-lt-reorder2)
 
 add_custom_target(${outFileName} ALL
     COMMENT "Golang build ${outFileName}"

@@ -13,6 +13,37 @@
 #include <thread>
 #include <vector>
 
+static uint32_t findMaxGridIndex(fs::path const & folder, std::string const & ext)
+{
+	uint32_t max = 0;
+	bool	 ok	 = false;
+	for (fs::recursive_directory_iterator iter(folder), end; iter != end; iter++) {
+		if (fs::is_regular_file(iter->status()) && fs::file_size(iter->path()) != 0) {
+			if (ext != "" && iter->path().extension() != ext) {
+				continue;
+			}
+
+			auto in = iter->path().stem().string();
+
+			uint32_t temp[2]  = {0, 0};
+			auto	 delimPos = in.find("-");
+			temp[0]			  = atoi(in.substr(0, delimPos).c_str());
+			temp[1]			  = atoi(in.substr(delimPos + 1, in.size()).c_str());
+
+			max = (temp[0] > max) ? temp[0] : max;
+			max = (temp[1] > max) ? temp[1] : max;
+
+			ok = true;
+		}
+	}
+
+	if (ok) {
+		return max;
+	} else {
+		throw std::runtime_error("No grid file");
+	}
+}
+
 static void DataManagerInit(Context & ctx, int myID)
 {
 
@@ -66,7 +97,7 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 {
 	if (myID > -1) {
 		// GPU
-		auto const GridWidth = ctx.meta.info.width.row;
+		auto const GridWidth = ctx.grid.width;
 
 		auto & myMem = ctx.dataManagerCtx[myID];
 
@@ -98,7 +129,7 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 		ctx.executionManagerCtx.insert({myID, myCtx});
 	} else if (myID == -1) {
 		// CPU
-		auto const GridWidth = ctx.meta.info.width.row;
+		auto const GridWidth = ctx.grid.width;
 
 		auto & myMem = ctx.dataManagerCtx[myID];
 
@@ -130,7 +161,9 @@ static void init(Context & ctx, int argc, char * argv[])
 	}
 
 	ctx.folderPath = fs::path(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
-	ctx.meta.Load(ctx.folderPath / "meta.json");
+	ctx.grid.count = findMaxGridIndex(ctx.folderPath, ".row") + 1;
+	ctx.grid.width = (1 << 24);
+
 	for (int i = 0; i < 3; i++) {
 		ctx.setting[i] = strtol(argv[i + 2], nullptr, 10);
 	}

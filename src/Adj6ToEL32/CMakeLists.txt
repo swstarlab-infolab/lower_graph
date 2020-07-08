@@ -1,2 +1,0 @@
-add_subdirectory(Phase1)
-add_subdirectory(Phase2)

@@ -66,7 +66,8 @@ static auto dedup(std::shared_ptr<EdgeList32> in)
 				for (size_t offset = 0; offset < r.grainsize(); offset++) {
 					auto curr = grain + offset;
 					auto next = grain + offset + 1;
-					if (in->at(curr) != in->at(next)) {
+					if ((in->at(curr)[0] != in->at(next)[0]) ||
+						(in->at(curr)[1] != in->at(next)[1])) {
 						setBit(curr);
 					}
 				}
@@ -78,7 +79,7 @@ static auto dedup(std::shared_ptr<EdgeList32> in)
 	// exclusive sum
 	tbb::parallel_scan(
 		tbb::blocked_range<size_t>(0, in->size()),
-		0,
+		0L,
 		[&](tbb::blocked_range<size_t> const & r, uint64_t sum, bool isFinalScan) {
 			auto temp = sum;
 			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
@@ -98,7 +99,7 @@ static auto dedup(std::shared_ptr<EdgeList32> in)
 	// count bit using parallel reduce
 	size_t ones = tbb::parallel_reduce(
 		tbb::blocked_range<size_t>(0, 32 * bitvec.size()),
-		0,
+		0L,
 		[&](tbb::blocked_range<size_t> const & r, size_t sum) {
 			auto temp = sum;
 			for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
@@ -214,7 +215,7 @@ static void writeCSR(Context const & ctx, fs::path tempFilePath, std::shared_ptr
 		// exclusive sum
 		tbb::parallel_scan(
 			tbb::blocked_range<size_t>(0, in->size()),
-			0,
+			0L,
 			[&](tbb::blocked_range<size_t> const & r, uint64_t sum, bool isFinalScan) {
 				auto temp = sum;
 				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
@@ -234,7 +235,7 @@ static void writeCSR(Context const & ctx, fs::path tempFilePath, std::shared_ptr
 		// count bit using parallel reduce
 		size_t ones = tbb::parallel_reduce(
 			tbb::blocked_range<size_t>(0, 32 * bitvec.size()),
-			0,
+			0L,
 			[&](tbb::blocked_range<size_t> const & r, size_t sum) {
 				auto temp = sum;
 				for (size_t grain = r.begin(); grain != r.end(); grain += r.grainsize()) {
