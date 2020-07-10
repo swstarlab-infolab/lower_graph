@@ -2,6 +2,7 @@
 #include "util.h"
 
 #include <tbb/blocked_range.h>
+#include <tbb/concurrent_vector.h>
 #include <tbb/parallel_sort.h>
 #include <thread>
 #include <vector>
@@ -11,35 +12,35 @@ sp<std::vector<uint64_t>> stage0(fs::path const & inFolder,
 								 uint64_t const	  maxVID,
 								 uint64_t const	  reorderType)
 {
-	std::vector<Reorder> temp(maxVID + 1);
+	tbb::concurrent_vector<Reorder> temp(maxVID + 1);
 
 	auto workers = std::thread::hardware_concurrency();
 	parallelDo(workers, [&](size_t const idx) {
 		for (auto i = idx; i < temp.size(); i += workers) {
-			temp[i].key.store(uint64_t(i));
-			temp[i].val.store(0);
+			temp[i].key = uint64_t(i);
+			temp[i].val = 0;
 		}
 	});
 
 	stopwatch("Stage0, Count degree", [&] {
 		auto fListChan = fileList(inFolder, "");
-		parallelDo(4, [&](size_t const i) {
+		parallelDo(8, [&](size_t const i) {
 			for (auto & fPath : *fListChan) {
 				auto adj6		 = fileLoad<uint8_t>(fPath);
 				auto sRawDatChan = splitAdj6(adj6);
 
-				parallelDo(32, [&](size_t const j) {
+				parallelDo(64, [&](size_t const j) {
 					for (auto & dat : *sRawDatChan) {
 						auto s = dat.src;
-						temp[s].val.fetch_add(dat.cnt);
+						temp[s].val += dat.cnt;
 
 						for (auto i = uint64_t(0); i < dat.cnt; i++) {
 							auto d = be6_le8(&(adj6->at(dat.dstStart + i * 6)));
 
 							if (s != d) {
-								temp[d].val.fetch_add(1);
+								temp[d].val++;
 							} else {
-								temp[s].val.fetch_sub(1);
+								temp[s].val--;
 							}
 						}
 					}

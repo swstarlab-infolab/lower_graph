@@ -1,0 +1,1 @@
+./build/Adj6ToEL32 $1 $2 RMAT$3-24 0

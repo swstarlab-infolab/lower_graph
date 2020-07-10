@@ -324,12 +324,14 @@ void stage2(fs::path const & inFolder, fs::path const & outFolder)
 		return out;
 	}();
 
-	parallelDo(4, [&](size_t const i) {
+	parallelDo(8, [&](size_t const i) {
 		for (auto & fPath : *jobs) {
 			stopwatch("Stage2, " + std::string(fPath), [&] {
 				auto rawData = fileLoad<E32>(fPath);
 				auto deduped = dedup(rawData);
 				auto target	 = fPath.parent_path() / fPath.stem();
+				// auto sortedTarget = fs::path(fPath.string() + ".sort");
+				// fileSave(sortedTarget, deduped->data(), deduped->size() * sizeof(E32));
 				writeCSR(target, deduped);
 				fs::remove(fPath);
 			});

@@ -54,53 +54,12 @@ static auto mapper(sp<std::vector<uint8_t>> adj6,
 	return out;
 }
 
-static auto mapper_reorder(sp<std::vector<uint8_t>>	 adj6,
-						   sp<std::vector<uint64_t>> reorderTable,
-						   sp<bchan<RowPos>>		 in,
-						   uint32_t const			 gridWidth,
-						   bool const				 lowerTriangular)
-{
-	auto out = makeSp<bchan<sp<std::vector<GE32>>>>(16);
-	std::thread([=] {
-		for (auto dat : *in) {
-			auto el		  = makeSp<std::vector<GE32>>(dat.cnt);
-			auto selfloop = uint64_t(0);
-
-			for (uint64_t i = 0; i < dat.cnt; i++) {
-				auto src = reorderTable->at(dat.src);
-				auto dst = reorderTable->at(be6_le8(&(adj6->at(dat.dstStart + i * 6))));
-
-				if (lowerTriangular && src < dst) {
-					std::swap(src, dst);
-				} else if (src == dst) {
-					selfloop++;
-					continue;
-				}
-
-				GE32 ge32;
-
-				ge32[0][0] = (uint32_t)(src / gridWidth);
-				ge32[0][1] = (uint32_t)(dst / gridWidth);
-				ge32[1][0] = (uint32_t)(src % gridWidth);
-				ge32[1][1] = (uint32_t)(dst % gridWidth);
-
-				el->at(i - selfloop) = ge32;
-			}
-
-			el->resize(el->size() - selfloop);
-			out->push(el);
-		}
-		out->close();
-	}).detach();
-	return out;
-}
-
 static void
 shuffler(sp<bchan<sp<std::vector<GE32>>>> in, fs::path const & folder, std::string const & ext)
 {
 
 	auto map = make_unordered_map<E32, sp<std::vector<E32>>>(
-		128,
+		2048,
 		[](E32 const & k) {
 			auto a = std::hash<uint64_t>{}(uint64_t(k[0]) << (8 * sizeof(k[0])));
 			auto b = std::hash<uint64_t>{}(k[1]);
@@ -133,12 +92,10 @@ shuffler(sp<bchan<sp<std::vector<GE32>>>> in, fs::path const & folder, std::stri
 	}
 }
 
-void stage1(fs::path const &		  inFolder,
-			fs::path const &		  outFolder,
-			uint32_t const			  gridWidth,
-			bool const				  lowerTriangular,
-			bool const				  reorder,
-			sp<std::vector<uint64_t>> reorderTable)
+void stage1(fs::path const & inFolder,
+			fs::path const & outFolder,
+			uint32_t const	 gridWidth,
+			bool const		 lowerTriangular)
 {
 
 	auto fListChan = fileList(inFolder, "");
@@ -150,10 +107,7 @@ void stage1(fs::path const &		  inFolder,
 				auto rowPosChan = splitAdj6(adj6);
 
 				parallelDo(64, [&](size_t const i) {
-					auto mapped =
-						(reorder) ? mapper_reorder(
-										adj6, reorderTable, rowPosChan, gridWidth, lowerTriangular)
-								  : mapper(adj6, rowPosChan, gridWidth, lowerTriangular);
+					auto mapped = mapper(adj6, rowPosChan, gridWidth, lowerTriangular);
 					shuffler(mapped, outFolder, ".el32");
 				});
 			});

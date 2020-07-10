@@ -29,20 +29,4 @@ struct RowPos {
 	size_t src, cnt, dstStart;
 };
 
-struct Reorder {
-	uint64_t key, val;
-	/*
-		std::atomic<uint64_t> key, val;
-
-		Reorder() : key(), val() {}
-		Reorder(Reorder const & a) : key(a.key.load()), val(a.val.load()) {}
-		Reorder & operator=(Reorder const & other)
-		{
-			key.store(other.key.load());
-			val.store(other.val.load());
-			return *this;
-		}
-		*/
-};
-
 #endif /* CA0B2FF9_2C71_4DD4_927B_AB0FDD3FD13F */
