@@ -14,8 +14,9 @@ link_directories(
 
 add_subdirectory(BuddySystem)
 #add_subdirectory(Old-Converter)
-add_subdirectory(Adj6ToGCSR-lt)
-add_subdirectory(Adj6ToGCSR-lt-reorder)
+#add_subdirectory(Adj6ToGCSR-lt)
+add_subdirectory(Adj6ToGCSR)
+#add_subdirectory(Adj6ToGCSR-lt-reorder)
 #add_subdirectory(Adj6ToGCSR-lt-reorder2) // reorder2 has severe problem
 #add_subdirectory(IntrinsicTest)
 #add_subdirectory(ReadTestCPP)
