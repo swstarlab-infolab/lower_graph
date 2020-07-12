@@ -144,7 +144,7 @@ ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in)
 {
 	auto out = std::make_shared<bchan<CommandResult>>(1 << 4);
 	if (myID >= -1) {
-		std::thread([&, myID, in, out] { Execution(ctx, myID, in, out); }).detach();
+		std::thread([&, myID, in, out] { Execution(ctx, myID, myStream in, out); }).detach();
 	} else {
 		out->close();
 	}

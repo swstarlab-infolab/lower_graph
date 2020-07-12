@@ -165,6 +165,8 @@ struct DataManagerContext {
 
 	std::shared_ptr<Connections> conn; // Connection to other memory
 	std::shared_ptr<bchan<Tx>>	 chan; // Transaction input channel
+
+	cudaStream_t stream;
 };
 
 struct ExecutionManagerContext {
@@ -174,6 +176,7 @@ struct ExecutionManagerContext {
 
 	MemInfo<void>  cub;
 	MemInfo<Count> count;
+	cudaStream_t   stream;
 };
 
 struct Context {

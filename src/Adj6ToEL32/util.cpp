@@ -68,7 +68,7 @@ uint64_t be6_le8(uint8_t * in)
 
 sp<bchan<fs::path>> fileList(fs::path const & folder, std::string const & extension)
 {
-	auto out = makeSp<bchan<fs::path>>(16);
+	auto out = makeSp<bchan<fs::path>>(128);
 	std::thread([=] {
 		// recursive iteration
 		for (fs::recursive_directory_iterator iter(folder), end; iter != end; iter++) {
@@ -88,7 +88,7 @@ sp<bchan<fs::path>> fileList(fs::path const & folder, std::string const & extens
 
 sp<bchan<RowPos>> splitAdj6(sp<std::vector<uint8_t>> adj6)
 {
-	auto out = makeSp<bchan<RowPos>>(16);
+	auto out = makeSp<bchan<RowPos>>(256);
 	std::thread([=] {
 		for (size_t i = 0; i < adj6->size();) {
 			RowPos rPos;

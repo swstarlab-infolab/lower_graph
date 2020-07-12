@@ -1,4 +1,4 @@
-set(outFileName TriangleCounting-LowerTriangular-BinarySearch-Manual-no-meta-streaming)
+set(outFileName TriangleCounting-LowerTriangular-BinarySearch-Manual-no-meta)
 file(GLOB_RECURSE files ${CMAKE_CURRENT_SOURCE_DIR}/*)
 cuda_add_executable(${outFileName} ${files})
 add_dependencies(${outFileName} GridCSR BuddySystem)

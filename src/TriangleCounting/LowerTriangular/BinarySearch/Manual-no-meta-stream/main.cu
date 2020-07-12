@@ -49,7 +49,7 @@ static void DataManagerInit(Context & ctx, int myID)
 
 	using DataChanType = bchan<Tx>;
 
-	auto & myMem = ctx.dataManagerCtx[myID];
+	auto & myCtx = ctx.dataManagerCtx[myID];
 
 	printf("Start to initialize Device: %d\n", myID);
 	if (myID > -1) {
@@ -59,37 +59,39 @@ static void DataManagerInit(Context & ctx, int myID)
 		cudaMemGetInfo(&freeMem, nullptr);
 		freeMem -= (1L << 29);
 		cudaSetDevice(myID);
-		myMem.buf	= allocCUDA<void>(freeMem);
-		myMem.buddy = std::make_shared<portable_buddy_system>();
-		myMem.buddy.get()->init(memrgn_t{myMem.buf.get(), freeMem}, 256, 1);
-		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
-		myMem.conn.get()->upstream = -1;
+		myCtx.buf	= allocCUDA<void>(freeMem);
+		myCtx.buddy = std::make_shared<portable_buddy_system>();
+		myCtx.buddy.get()->init(memrgn_t{myCtx.buf.get(), freeMem}, 256, 1);
+		myCtx.conn				   = std::make_shared<DataManagerContext::Connections>();
+		myCtx.conn.get()->upstream = -1;
 		for (int32_t i = 0; i < ctx.deviceCount; i++) {
 			if (myID != i) {
-				myMem.conn.get()->neighbor.push_back(i);
+				myCtx.conn.get()->neighbor.push_back(i);
 			}
 		}
 
-		myMem.chan	= std::make_shared<bchan<Tx>>(16);
-		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
-		myMem.cacheMtx = std::make_shared<std::mutex>();
+		myCtx.chan	= std::make_shared<bchan<Tx>>(16);
+		myCtx.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
+		myCtx.cacheMtx = std::make_shared<std::mutex>();
+
+		cudaStreamCreate(&myCtx.stream);
 	} else if (myID == -1) {
 		// CPU Memory
 		// size_t freeMem = (1L << 37); // 128GB
 		size_t freeMem = (1L << 35); // 32GB
-		myMem.buf	   = allocHost<void>(freeMem);
-		myMem.buddy	   = std::make_shared<portable_buddy_system>();
-		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
-		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
-		myMem.conn.get()->upstream = -2;
-		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
-		myMem.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
-		myMem.cacheMtx = std::make_shared<std::mutex>();
+		myCtx.buf	   = allocHost<void>(freeMem);
+		myCtx.buddy	   = std::make_shared<portable_buddy_system>();
+		myCtx.buddy->init(memrgn_t{myCtx.buf.get(), freeMem}, 8, 1);
+		myCtx.conn				   = std::make_shared<DataManagerContext::Connections>();
+		myCtx.conn.get()->upstream = -2;
+		myCtx.chan				   = std::make_shared<bchan<Tx>>(16);
+		myCtx.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
+		myCtx.cacheMtx = std::make_shared<std::mutex>();
 	} else {
 		// Storage
-		myMem.conn				   = std::make_shared<DataManagerContext::Connections>();
-		myMem.conn.get()->upstream = -2;
-		myMem.chan				   = std::make_shared<bchan<Tx>>(16);
+		myCtx.conn				   = std::make_shared<DataManagerContext::Connections>();
+		myCtx.conn.get()->upstream = -2;
+		myCtx.chan				   = std::make_shared<bchan<Tx>>(16);
 	}
 }
 
@@ -127,6 +129,8 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
 
 		ctx.executionManagerCtx.insert({myID, myCtx});
+
+		cudaStreamCreate(&myCtx.stream);
 	} else if (myID == -1) {
 		// CPU
 		auto const GridWidth = ctx.grid.width;

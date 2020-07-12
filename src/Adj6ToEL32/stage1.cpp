@@ -19,7 +19,7 @@ static auto mapper(sp<std::vector<uint8_t>> adj6,
 				   uint32_t const			gridWidth,
 				   bool const				lowerTriangular)
 {
-	auto out = makeSp<bchan<sp<std::vector<GE32>>>>(16);
+	auto out = makeSp<bchan<sp<std::vector<GE32>>>>(32);
 	std::thread([=] {
 		for (auto dat : *in) {
 			auto el		  = makeSp<std::vector<GE32>>(dat.cnt);
@@ -59,7 +59,7 @@ shuffler(sp<bchan<sp<std::vector<GE32>>>> in, fs::path const & folder, std::stri
 {
 
 	auto map = make_unordered_map<E32, sp<std::vector<E32>>>(
-		2048,
+		8192,
 		[](E32 const & k) {
 			auto a = std::hash<uint64_t>{}(uint64_t(k[0]) << (8 * sizeof(k[0])));
 			auto b = std::hash<uint64_t>{}(k[1]);
@@ -100,13 +100,13 @@ void stage1(fs::path const & inFolder,
 
 	auto fListChan = fileList(inFolder, "");
 
-	parallelDo(8, [&](size_t const i) {
+	parallelDo(4, [&](size_t const i) {
 		for (auto & fPath : *fListChan) {
 			stopwatch("Stage1, " + std::string(fPath), [&] {
 				auto adj6		= fileLoad<uint8_t>(fPath);
 				auto rowPosChan = splitAdj6(adj6);
 
-				parallelDo(64, [&](size_t const i) {
+				parallelDo(128, [&](size_t const i) {
 					auto mapped = mapper(adj6, rowPosChan, gridWidth, lowerTriangular);
 					shuffler(mapped, outFolder, ".el32");
 				});

@@ -147,7 +147,7 @@ static auto dedup(sp<std::vector<E32>> in)
 void stage2(fs::path const & inFolder, fs::path const & outFolder)
 {
 	auto jobs = [&] {
-		auto out = makeSp<bchan<fs::path>>(16);
+		auto out = makeSp<bchan<fs::path>>(128);
 		std::thread([=] {
 			auto fListChan = fileList(inFolder, ".el32");
 			for (auto & f : *fListChan) {
@@ -158,15 +158,15 @@ void stage2(fs::path const & inFolder, fs::path const & outFolder)
 		return out;
 	}();
 
-	parallelDo(8, [&](size_t const i) {
+	parallelDo(4, [&](size_t const i) {
 		for (auto & fPath : *jobs) {
-			stopwatch("Stage2, " + std::string(fPath), [&] {
-				auto rawData	  = fileLoad<E32>(fPath);
-				auto deduped	  = dedup(rawData);
-				auto sortedTarget = fs::path(fPath.string() + ".sorted");
-				fileSave(sortedTarget, deduped->data(), deduped->size() * sizeof(E32));
-				fs::remove(fPath);
-			});
+			// stopwatch("Stage2, " + std::string(fPath), [&] {
+			auto rawData	  = fileLoad<E32>(fPath);
+			auto deduped	  = dedup(rawData);
+			auto sortedTarget = fs::path(fPath.string() + ".sorted");
+			fileSave(sortedTarget, deduped->data(), deduped->size() * sizeof(E32));
+			fs::remove(fPath);
+			//});
 		}
 	});
 }
