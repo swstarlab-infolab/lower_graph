@@ -111,7 +111,7 @@ struct CacheValue {
 	int				refCnt;
 };
 
-enum Method : uint32_t { Find, Ready, Done };
+enum Method : uint32_t { Ready, Done };
 
 // Transaction
 struct Tx {
@@ -153,8 +153,7 @@ struct DataManagerContext {
 	using Cache = std::unordered_map<Key, CacheValue, KeyHash, KeyEqual>;
 
 	struct Connections {
-		DeviceID			  upstream;
-		std::vector<DeviceID> neighbor;
+		DeviceID upstream;
 	};
 
 	std::shared_ptr<Cache>		cache;	  // Cache
@@ -170,13 +169,16 @@ struct DataManagerContext {
 };
 
 struct ExecutionManagerContext {
-	struct {
-		MemInfo<Lookup> G0, G2, temp;
-	} lookup;
+	struct EACHSTREAM {
+		struct {
+			MemInfo<Lookup> G0, G2, temp;
+		} lookup;
 
-	MemInfo<void>  cub;
-	MemInfo<Count> count;
-	cudaStream_t   stream;
+		MemInfo<void>  cub;
+		MemInfo<Count> count;
+		cudaStream_t   stream;
+	};
+	std::vector<EACHSTREAM> my;
 };
 
 struct Context {

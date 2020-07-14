@@ -33,29 +33,6 @@ static auto genPath(Context & ctx, Key const & k)
 	return finalPath;
 }
 
-static auto methodFind(Context & ctx, DeviceID myID)
-{
-	auto in = std::make_shared<bchan<Tx>>(16);
-	std::thread([&, myID, in] {
-		auto & myCtx = ctx.dataManagerCtx[myID];
-
-		for (auto & tx : *in) {
-			MemInfo<Vertex> myInfo = {
-				0,
-			};
-			{
-				std::lock_guard<std::mutex> lg(*myCtx.cacheMtx);
-				myInfo.ok = (myCtx.cache->find(tx.key) != myCtx.cache->end());
-			}
-			myInfo.hit = myInfo.ok;
-			tx.cb->push(myInfo);
-			tx.cb->close();
-		}
-	}).detach();
-
-	return in;
-}
-
 static auto methodDone(Context & ctx, DeviceID myID)
 {
 	auto in = std::make_shared<bchan<Tx>>(16);
@@ -135,45 +112,6 @@ static void tryAllocate(Context &					   ctx,
 			}
 		}
 	}
-}
-
-static DeviceID asktoNeighbor(Context & ctx, Key & key, DeviceID myID, MemInfo<Vertex> & myInfo)
-{
-	auto & nList = ctx.dataManagerCtx[myID].conn->neighbor;
-
-	if (nList.size() > 0) {
-		std::vector<bool>  nSuccess(nList.size());
-		std::vector<fiber> waitGroup(nList.size());
-
-		for (size_t i = 0; i < nList.size(); i++) {
-			waitGroup[i] = fiber([&, i] {
-				Tx tx;
-				tx.key	  = key;
-				tx.method = Method::Find;
-				tx.cb	  = std::make_shared<bchan<MemInfo<Vertex>>>(2);
-
-				ctx.dataManagerCtx[nList[i]].chan->push(tx);
-
-				for (auto & info : *tx.cb) {
-					nSuccess[i] = info.ok;
-				}
-			});
-		}
-
-		for (auto & w : waitGroup) {
-			if (w.joinable()) {
-				w.join();
-			}
-		}
-
-		for (size_t i = 0; i < nList.size(); i++) {
-			if (nSuccess[i]) {
-				return nList[i];
-			}
-		}
-	}
-
-	return std::numeric_limits<DeviceID>::min();
 }
 
 static MemInfo<Vertex> requestToReady(Context & ctx, Key & key, DeviceID targetID)
@@ -268,7 +206,12 @@ static auto methodReady(Context & ctx, DeviceID myID)
 					// printf("[%2d] %s cudaMemcpy Host[%p]-> GPU[%p], %ld bytes)\n", myID,
 					// tx.key.print().c_str(), otherInfo.ptr, myInfo.ptr, otherInfo.byte);
 					cudaSetDevice(myID);
-					cudaMemcpy(myInfo.ptr, otherInfo.ptr, otherInfo.byte, cudaMemcpyHostToDevice);
+					cudaMemcpyAsync(myInfo.ptr,
+									otherInfo.ptr,
+									otherInfo.byte,
+									cudaMemcpyHostToDevice,
+									myCtx.stream);
+					cudaStreamSynchronize(myCtx.stream);
 				}
 
 				// printf("[%2d] %s Memcpy/Read complete\n", myID, tx.key.print().c_str());
@@ -307,18 +250,6 @@ void DataManager(Context & ctx, DeviceID myID)
 		std::thread([&, myID] {
 			for (auto & tx : *ctx.dataManagerCtx[myID].chan) {
 				switch (tx.method) {
-				case Method::Find:
-					fiber([&, myID, tx] {
-						MemInfo<Vertex> myInfo = {
-							0,
-						};
-
-						myInfo.hit = true;
-
-						tx.cb->push(myInfo);
-						tx.cb->close();
-					}).detach();
-					break;
 				case Method::Ready:
 					fiber([&, myID, tx] {
 						MemInfo<Vertex> myInfo = {
@@ -352,15 +283,11 @@ void DataManager(Context & ctx, DeviceID myID)
 	} else {
 		// Main/GPU Memory
 		std::thread([&, myID] {
-			auto FindChan  = methodFind(ctx, myID);
 			auto ReadyChan = methodReady(ctx, myID);
 			auto DoneChan  = methodDone(ctx, myID);
 
 			for (auto & tx : *ctx.dataManagerCtx[myID].chan) {
 				switch (tx.method) {
-				case Method::Find:
-					FindChan->push(tx);
-					break;
 				case Method::Ready:
 					ReadyChan->push(tx);
 					break;
@@ -370,7 +297,6 @@ void DataManager(Context & ctx, DeviceID myID)
 				}
 			}
 
-			FindChan->close();
 			ReadyChan->close();
 			DoneChan->close();
 		}).detach();

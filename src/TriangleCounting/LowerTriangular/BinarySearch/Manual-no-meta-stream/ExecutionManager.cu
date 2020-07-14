@@ -9,9 +9,11 @@
 
 static void Execution(Context &								ctx,
 					  DeviceID								myID,
+					  size_t								myStreamID,
 					  std::shared_ptr<bchan<Command>>		in,
 					  std::shared_ptr<bchan<CommandResult>> out)
 {
+	// printf("myDeviceID: %d, myStreamID: %ld\n", myID, myStreamID);
 	using DataTxCallback = bchan<MemInfo<Vertex>>;
 
 	size_t hitCount = 0, missCount = 0;
@@ -60,35 +62,57 @@ static void Execution(Context &								ctx,
 			}
 		}
 
+		/*
+		printf("Kernel Start:\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n",
+			   req.gidx[0][0],
+			   req.gidx[0][1],
+			   memInfo[0][0].print().c_str(),
+			   memInfo[0][1].print().c_str(),
+			   memInfo[0][2].print().c_str(),
+			   req.gidx[1][0],
+			   req.gidx[1][1],
+			   memInfo[1][0].print().c_str(),
+			   memInfo[1][1].print().c_str(),
+			   memInfo[1][2].print().c_str(),
+			   req.gidx[2][0],
+			   req.gidx[2][1],
+			   memInfo[2][0].print().c_str(),
+			   memInfo[2][1].print().c_str(),
+			   memInfo[2][2].print().c_str());
+				   */
+
 		Count myTriangle = 0;
 		// LAUNCH
 		if (myID > -1) {
-			myTriangle = launchKernelGPU(ctx, myID, memInfo);
+			myTriangle = launchKernelGPU(ctx, myID, myStreamID, memInfo);
 		} else {
 			// myTriangle = launchKernelCPU(ctx, myID, memInfo);
 		}
 
 		/*
-				printf("Kernel End:\n"
-					   "(%d,%d):[%s,%s,%s]\n"
-					   "(%d,%d):[%s,%s,%s]\n"
-					   "(%d,%d):[%s,%s,%s]\n",
-					   req.gidx[0][0],
-					   req.gidx[0][1],
-					   memInfo[0][0].print().c_str(),
-					   memInfo[0][1].print().c_str(),
-					   memInfo[0][2].print().c_str(),
-					   req.gidx[1][0],
-					   req.gidx[1][1],
-					   memInfo[1][0].print().c_str(),
-					   memInfo[1][1].print().c_str(),
-					   memInfo[1][2].print().c_str(),
-					   req.gidx[2][0],
-					   req.gidx[2][1],
-					   memInfo[2][0].print().c_str(),
-					   memInfo[2][1].print().c_str(),
-					   memInfo[2][2].print().c_str());
-					   */
+		printf("Kernel End:\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n",
+			   req.gidx[0][0],
+			   req.gidx[0][1],
+			   memInfo[0][0].print().c_str(),
+			   memInfo[0][1].print().c_str(),
+			   memInfo[0][2].print().c_str(),
+			   req.gidx[1][0],
+			   req.gidx[1][1],
+			   memInfo[1][0].print().c_str(),
+			   memInfo[1][1].print().c_str(),
+			   memInfo[1][2].print().c_str(),
+			   req.gidx[2][0],
+			   req.gidx[2][1],
+			   memInfo[2][0].print().c_str(),
+			   memInfo[2][1].print().c_str(),
+			   memInfo[2][2].print().c_str());
+							   */
 
 		auto end = std::chrono::system_clock::now();
 
@@ -130,9 +154,6 @@ static void Execution(Context &								ctx,
 		out->push(res);
 	}
 
-	ctx.dataManagerCtx[myID].chan->close();
-	out->close();
-
 	printf("HIT: %ld, MISS: %ld, HIT/TOTAL: %lf\n",
 		   hitCount,
 		   missCount,
@@ -144,7 +165,22 @@ ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in)
 {
 	auto out = std::make_shared<bchan<CommandResult>>(1 << 4);
 	if (myID >= -1) {
-		std::thread([&, myID, in, out] { Execution(ctx, myID, myStream in, out); }).detach();
+		std::thread([=, &ctx] {
+			std::vector<std::thread> ts(ctx.setting[0]);
+
+			for (size_t streamID = 0; streamID < ctx.setting[0]; streamID++) {
+				ts[streamID] = std::thread([=, &ctx] { Execution(ctx, myID, streamID, in, out); });
+			}
+
+			for (size_t streamID = 0; streamID < ctx.setting[0]; streamID++) {
+				if (ts[streamID].joinable()) {
+					ts[streamID].join();
+				}
+			}
+
+			ctx.dataManagerCtx[myID].chan->close();
+			out->close();
+		}).detach();
 	} else {
 		out->close();
 	}

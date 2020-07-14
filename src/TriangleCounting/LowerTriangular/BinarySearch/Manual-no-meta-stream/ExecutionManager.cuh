@@ -5,7 +5,7 @@
 
 #include <memory>
 
-Count launchKernelGPU(Context & ctx, DeviceID myID, Grids & G);
+Count launchKernelGPU(Context & ctx, DeviceID myID, size_t myStreamID, Grids & G);
 // Count launchKernelCPU(Context & ctx, DeviceID myID, Grids & G);
 
 std::shared_ptr<bchan<CommandResult>>

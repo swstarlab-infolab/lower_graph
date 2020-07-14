@@ -64,16 +64,12 @@ static void DataManagerInit(Context & ctx, int myID)
 		myCtx.buddy.get()->init(memrgn_t{myCtx.buf.get(), freeMem}, 256, 1);
 		myCtx.conn				   = std::make_shared<DataManagerContext::Connections>();
 		myCtx.conn.get()->upstream = -1;
-		for (int32_t i = 0; i < ctx.deviceCount; i++) {
-			if (myID != i) {
-				myCtx.conn.get()->neighbor.push_back(i);
-			}
-		}
 
 		myCtx.chan	= std::make_shared<bchan<Tx>>(16);
 		myCtx.cache = std::make_shared<DataManagerContext::Cache>(1L << 24); //, KeyHash, KeyEqual);
 		myCtx.cacheMtx = std::make_shared<std::mutex>();
 
+		cudaSetDevice(myID);
 		cudaStreamCreate(&myCtx.stream);
 	} else if (myID == -1) {
 		// CPU Memory
@@ -99,39 +95,50 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 {
 	if (myID > -1) {
 		// GPU
+
 		auto const GridWidth = ctx.grid.width;
 
 		auto & myMem = ctx.dataManagerCtx[myID];
 
 		ExecutionManagerContext myCtx;
 
-		cudaSetDevice(myID);
-		myCtx.lookup.G0.byte   = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.G0.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G0.byte);
-		myCtx.lookup.G2.byte   = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G2.byte);
-		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
+		myCtx.my.resize(ctx.setting[0]);
+		for (auto & c : myCtx.my) {
+			cudaSetDevice(myID);
+			cudaStreamCreate(&c.stream);
+			auto e = cudaStreamQuery(c.stream);
+			printf("DEVICE: %d, STREAM: %p, %s(%d), %s\n",
+				   myID,
+				   c.stream,
+				   cudaGetErrorName(e),
+				   e,
+				   cudaGetErrorString(e));
 
-		cudaSetDevice(myID);
-		cudaMemset(myCtx.lookup.temp.ptr, 0, myCtx.lookup.temp.byte);
-		cudaMemset(myCtx.lookup.G0.ptr, 0, myCtx.lookup.G0.byte);
-		cudaMemset(myCtx.lookup.G2.ptr, 0, myCtx.lookup.G2.byte);
+			cudaSetDevice(myID);
+			c.lookup.G0.byte   = sizeof(Lookup) * GridWidth;
+			c.lookup.G0.ptr	   = (Lookup *)myMem.buddy->allocate(c.lookup.G0.byte);
+			c.lookup.G2.byte   = sizeof(Lookup) * GridWidth;
+			c.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(c.lookup.G2.byte);
+			c.lookup.temp.byte = sizeof(Lookup) * GridWidth;
+			c.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(c.lookup.temp.byte);
 
-		cub::DeviceScan::ExclusiveSum(nullptr,
-									  myCtx.cub.byte,
-									  myCtx.lookup.temp.ptr,
-									  myCtx.lookup.G0.ptr,
-									  myCtx.lookup.G0.count());
-		myCtx.cub.ptr = myMem.buddy->allocate(myCtx.cub.byte);
+			cudaSetDevice(myID);
+			cudaMemset(c.lookup.temp.ptr, 0, c.lookup.temp.byte);
+			cudaMemset(c.lookup.G0.ptr, 0, c.lookup.G0.byte);
+			cudaMemset(c.lookup.G2.ptr, 0, c.lookup.G2.byte);
 
-		myCtx.count.byte = sizeof(Count);
-		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
+			cudaSetDevice(myID);
+			cub::DeviceScan::ExclusiveSum(
+				nullptr, c.cub.byte, c.lookup.temp.ptr, c.lookup.G0.ptr, c.lookup.G0.count());
+			c.cub.ptr = myMem.buddy->allocate(c.cub.byte);
+
+			c.count.byte = sizeof(Count);
+			c.count.ptr	 = (Count *)myMem.buddy->allocate(c.count.byte);
+		}
 
 		ctx.executionManagerCtx.insert({myID, myCtx});
-
-		cudaStreamCreate(&myCtx.stream);
 	} else if (myID == -1) {
+		/*
 		// CPU
 		auto const GridWidth = ctx.grid.width;
 
@@ -153,6 +160,7 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
 
 		ctx.executionManagerCtx.insert({myID, myCtx});
+		*/
 	}
 }
 

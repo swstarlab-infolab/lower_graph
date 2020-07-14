@@ -111,24 +111,25 @@ kernel(Grids const g, Lookup const * lookup0, Lookup const * lookup2, Count * co
 	}
 }
 
-Count launchKernelGPU(Context & ctx, DeviceID myID, Grids & G)
+Count launchKernelGPU(Context & ctx, DeviceID myID, size_t myStreamID, Grids & G)
 {
-	auto & myCtx   = ctx.executionManagerCtx[myID];
+
+	auto & myCtx   = ctx.executionManagerCtx[myID].my[myStreamID];
 	auto & blocks  = ctx.setting[1];
 	auto & threads = ctx.setting[2];
 
-	// if (!(G[0][0].byte && G[1][0].byte && G[2][0].byte)) { return 0; }
+	auto stream = myCtx.stream;
 
-	// cudaStream_t stream;
+	if (!(G[0][0].byte && G[1][0].byte && G[2][0].byte)) {
+		return 0;
+	}
 
 	cudaSetDevice(myID);
-	cudaMemset(myCtx.count.ptr, 0, myCtx.count.byte);
+	cudaMemsetAsync(myCtx.count.ptr, 0x00, myCtx.count.byte, stream);
 	CUDACHECK();
 
-	// cudaStreamCreate(&stream);
-	// CUDACHECK();
 	cudaSetDevice(myID);
-	genLookupTemp<<<blocks, threads>>>(G[0], myCtx.lookup.temp.ptr);
+	genLookupTemp<<<blocks, threads, 0, stream>>>(G[0], myCtx.lookup.temp.ptr);
 	CUDACHECK();
 
 	cudaSetDevice(myID);
@@ -136,15 +137,16 @@ Count launchKernelGPU(Context & ctx, DeviceID myID, Grids & G)
 								  myCtx.cub.byte,
 								  myCtx.lookup.temp.ptr,
 								  myCtx.lookup.G0.ptr,
-								  myCtx.lookup.G0.count());
+								  myCtx.lookup.G0.count(),
+								  stream);
 	CUDACHECK();
 
 	cudaSetDevice(myID);
-	resetLookupTemp<<<blocks, threads>>>(G[0], myCtx.lookup.temp.ptr);
+	resetLookupTemp<<<blocks, threads, 0, stream>>>(G[0], myCtx.lookup.temp.ptr);
 	CUDACHECK();
 
 	cudaSetDevice(myID);
-	genLookupTemp<<<blocks, threads>>>(G[2], myCtx.lookup.temp.ptr);
+	genLookupTemp<<<blocks, threads, 0, stream>>>(G[2], myCtx.lookup.temp.ptr);
 	CUDACHECK();
 
 	cudaSetDevice(myID);
@@ -152,29 +154,26 @@ Count launchKernelGPU(Context & ctx, DeviceID myID, Grids & G)
 								  myCtx.cub.byte,
 								  myCtx.lookup.temp.ptr,
 								  myCtx.lookup.G2.ptr,
-								  myCtx.lookup.G2.count());
+								  myCtx.lookup.G2.count(),
+								  stream);
 	CUDACHECK();
 
 	cudaSetDevice(myID);
-	resetLookupTemp<<<blocks, threads>>>(G[2], myCtx.lookup.temp.ptr);
+	resetLookupTemp<<<blocks, threads, 0, stream>>>(G[2], myCtx.lookup.temp.ptr);
 	CUDACHECK();
 
 	cudaSetDevice(myID);
-	kernel<<<blocks, threads>>>(G, myCtx.lookup.G0.ptr, myCtx.lookup.G2.ptr, myCtx.count.ptr);
+	kernel<<<blocks, threads, 0, stream>>>(
+		G, myCtx.lookup.G0.ptr, myCtx.lookup.G2.ptr, myCtx.count.ptr);
 	CUDACHECK();
-
-	// cudaSetDevice(myID);
-	// edgeCount<<<blocks, threads>>>(G, myCtx.count.ptr);
 
 	Count cnt = 0;
 	cudaSetDevice(myID);
-	// cudaMemcpyAsync(&cnt, myCtx.count.ptr, sizeof(Count), cudaMemcpyDeviceToHost, stream);
-	cudaMemcpy(&cnt, myCtx.count.ptr, sizeof(Count), cudaMemcpyDeviceToHost);
+	cudaMemcpyAsync(&cnt, myCtx.count.ptr, sizeof(Count), cudaMemcpyDeviceToHost, stream);
 	CUDACHECK();
 
-	// cudaStreamSynchronize(stream); CUDACHECK();
-	// cudaDeviceSynchronize(); CUDACHECK();
-	// cudaStreamDestroy(stream); CUDACHECK();
+	cudaStreamSynchronize(stream);
+	CUDACHECK();
 
 	return cnt;
 }
