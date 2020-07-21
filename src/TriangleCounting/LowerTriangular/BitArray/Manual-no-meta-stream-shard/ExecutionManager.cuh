@@ -9,6 +9,6 @@ Count launchKernelGPU(Context & ctx, DeviceID myID, size_t myStreamID, Grids & G
 // Count launchKernelCPU(Context & ctx, DeviceID myID, Grids & G);
 
 std::shared_ptr<bchan<CommandResult>>
-ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in);
+ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<ThreeGrids>> in);
 
 #endif /* E31BFF48_8BC2_4E2F_B7C1_BAB762E43F83 */

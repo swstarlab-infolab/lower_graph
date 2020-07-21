@@ -27,11 +27,16 @@ using Lookup = uint32_t;
 using Count	 = unsigned long long;
 
 // For Buffer Management
-using DeviceID	 = int32_t;
-using GridIndex	 = std::array<uint32_t, 2>;
+using DeviceID = int32_t;
+
+struct GridIndex {
+	std::array<uint64_t, 2> xy;
+	int64_t					shard;
+};
+
 using ThreeGrids = std::array<GridIndex, 3>;
 
-#define GRIDWIDTH (1L<<24)
+#define GRIDWIDTH	(1L << 24)
 #define EXP_BITMAP0 12L
 #define EXP_BITMAP1 5L
 
@@ -84,7 +89,9 @@ struct MemInfo<void> {
 using Grid	= std::array<MemInfo<Vertex>, 3>;
 using Grids = std::array<Grid, 3>;
 
-enum DataType : uint32_t { Row = 0, Ptr, Col };
+using DataType = uint32_t;
+
+const std::array<std::string, 3> extension{".row", ".ptr", ".col"};
 
 struct Key {
 	GridIndex idx;
@@ -92,21 +99,8 @@ struct Key {
 
 	std::string print() const
 	{
-		std::string result =
-			"<(" + std::to_string(this->idx[0]) + "," + std::to_string(this->idx[1]) + "),";
-		switch (this->type) {
-		case DataType::Row:
-			result += "Row";
-			break;
-		case DataType::Ptr:
-			result += "Ptr";
-			break;
-		case DataType::Col:
-			result += "Col";
-			break;
-		}
-		result += ">";
-		return result;
+		return "<(" + std::to_string(this->idx.xy[0]) + "," + std::to_string(this->idx.xy[1]) +
+			   ")," + extension[type] + ">";
 	}
 };
 
@@ -131,25 +125,23 @@ struct CommandResult {
 	int		   deviceID;
 };
 
-struct Command {
-	ThreeGrids gidx;
-};
-
 // Types for Cache
 struct KeyHash {
 	std::size_t operator()(Key const & k) const
 	{
-		auto a = std::hash<uint64_t>{}(uint64_t(k.idx[0]) << (8 * sizeof(k.idx[0])));
-		auto b = std::hash<uint64_t>{}(k.idx[1]);
-		auto c = std::hash<uint64_t>{}(k.type);
-		return a ^ b ^ c;
+		auto a = std::hash<uint64_t>{}(k.idx.xy[0]);
+		auto b = std::hash<uint64_t>{}(~k.idx.xy[1]);
+		auto c = std::hash<uint64_t>{}(k.idx.shard);
+		auto d = std::hash<int64_t>{}(k.type);
+		return a ^ b ^ c ^ d;
 	}
 };
 
 struct KeyEqual {
 	bool operator()(Key const & kl, Key const & kr) const
 	{
-		return (kl.idx[0] == kr.idx[0] && kl.idx[1] == kr.idx[1] && kl.type == kr.type);
+		return (kl.idx.xy[0] == kr.idx.xy[0] && kl.idx.xy[1] == kr.idx.xy[1] &&
+				kr.idx.shard == kl.idx.shard && kl.type == kr.type);
 	}
 };
 

@@ -5,7 +5,7 @@
 
 #include <memory>
 
-std::shared_ptr<bchan<Command>> ScheduleManager(Context const & ctx);
+std::shared_ptr<bchan<ThreeGrids>> ScheduleManager(Context const & ctx);
 
 void ScheduleWaiter(std::shared_ptr<bchan<CommandResult>> executionRes);
 

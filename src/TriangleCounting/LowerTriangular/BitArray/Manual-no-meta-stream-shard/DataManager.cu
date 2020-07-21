@@ -1,5 +1,6 @@
 #include "DataManager.cuh"
 #include "make.cuh"
+#include "util.cuh"
 
 #include <BuddySystem/BuddySystem.h>
 #include <cuda_runtime.h>
@@ -11,27 +12,6 @@
 #include <tuple>
 #include <unistd.h>
 #include <unordered_map>
-
-static auto genPath(Context & ctx, Key const & k)
-{
-	auto baseString =
-		std::string(ctx.folderPath) + std::to_string(k.idx[0]) + "-" + std::to_string(k.idx[1]);
-
-	fs::path finalPath;
-	switch (k.type) {
-	case DataType::Row:
-		finalPath = fs::path(baseString + ".row");
-		break;
-	case DataType::Ptr:
-		finalPath = fs::path(baseString + ".ptr");
-		break;
-	case DataType::Col:
-		finalPath = fs::path(baseString + ".col");
-		break;
-	}
-
-	return finalPath;
-}
 
 static auto methodDone(Context & ctx, DeviceID myID)
 {
@@ -163,7 +143,7 @@ static auto methodReady(Context & ctx, DeviceID myID)
 			} else {
 				// printf("[%2d] %s Miss!\n", myID, tx.key.print().c_str());
 
-				myInfo.byte = fs::file_size(genPath(ctx, tx.key));
+				myInfo.byte = fs::file_size(csrPath(ctx.folderPath, tx.key.idx, tx.key.type));
 
 				tryAllocate(ctx, tx.key, myID, myInfo, ul, iHaveLock);
 
@@ -256,7 +236,7 @@ void DataManager(Context & ctx, DeviceID myID)
 							0,
 						};
 						myInfo.ptr	= nullptr;
-						myInfo.path = genPath(ctx, tx.key);
+						myInfo.path = csrPath(ctx.folderPath, tx.key.idx, tx.key.type);
 						myInfo.byte = fs::file_size(myInfo.path);
 						myInfo.ok	= true;
 						myInfo.hit	= true;

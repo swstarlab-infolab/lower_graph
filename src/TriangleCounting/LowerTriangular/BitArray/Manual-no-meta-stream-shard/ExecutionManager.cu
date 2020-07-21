@@ -10,7 +10,7 @@
 static void Execution(Context &								ctx,
 					  DeviceID								myID,
 					  size_t								myStreamID,
-					  std::shared_ptr<bchan<Command>>		in,
+					  std::shared_ptr<bchan<ThreeGrids>>	in,
 					  std::shared_ptr<bchan<CommandResult>> out)
 {
 	// printf("myDeviceID: %d, myStreamID: %ld\n", myID, myStreamID);
@@ -31,7 +31,7 @@ static void Execution(Context &								ctx,
 
 					Tx tx;
 					tx.method = Method::Ready;
-					tx.key	  = {req.gidx[i], (DataType)(type)};
+					tx.key	  = {{req[i].xy, req[i].shard}, (DataType)(type)};
 					tx.cb	  = callback;
 
 					ctx.dataManagerCtx[myID].chan->push(tx);
@@ -63,26 +63,29 @@ static void Execution(Context &								ctx,
 		}
 
 		/*
-		printf("Kernel Start:\n"
-			   "(%d,%d):[%s,%s,%s]\n"
-			   "(%d,%d):[%s,%s,%s]\n"
-			   "(%d,%d):[%s,%s,%s]\n",
-			   req.gidx[0][0],
-			   req.gidx[0][1],
-			   memInfo[0][0].print().c_str(),
-			   memInfo[0][1].print().c_str(),
-			   memInfo[0][2].print().c_str(),
-			   req.gidx[1][0],
-			   req.gidx[1][1],
-			   memInfo[1][0].print().c_str(),
-			   memInfo[1][1].print().c_str(),
-			   memInfo[1][2].print().c_str(),
-			   req.gidx[2][0],
-			   req.gidx[2][1],
-			   memInfo[2][0].print().c_str(),
-			   memInfo[2][1].print().c_str(),
-			   memInfo[2][2].print().c_str());
-				   */
+				printf("Kernel Start:\n"
+					   "<(%ld,%ld),%ld>:[%s,%s,%s]\n"
+					   "<(%ld,%ld),%ld>:[%s,%s,%s]\n"
+					   "<(%ld,%ld),%ld>:[%s,%s,%s]\n",
+					   req[0].xy[0],
+					   req[0].xy[1],
+					   req[0].shard,
+					   memInfo[0][0].print().c_str(),
+					   memInfo[0][1].print().c_str(),
+					   memInfo[0][2].print().c_str(),
+					   req[1].xy[0],
+					   req[1].xy[1],
+					   req[1].shard,
+					   memInfo[1][0].print().c_str(),
+					   memInfo[1][1].print().c_str(),
+					   memInfo[1][2].print().c_str(),
+					   req[2].xy[0],
+					   req[2].xy[1],
+					   req[2].shard,
+					   memInfo[2][0].print().c_str(),
+					   memInfo[2][1].print().c_str(),
+					   memInfo[2][2].print().c_str());
+					   */
 
 		Count myTriangle = 0;
 		// LAUNCH
@@ -124,7 +127,7 @@ static void Execution(Context &								ctx,
 
 					Tx tx;
 					tx.method = Method::Done;
-					tx.key	  = {req.gidx[i], (DataType)(type)};
+					tx.key	  = {{req[i].xy, req[i].shard}, (DataType)(type)};
 					tx.cb	  = callback;
 
 					ctx.dataManagerCtx[myID].chan->push(tx);
@@ -146,7 +149,7 @@ static void Execution(Context &								ctx,
 
 		// CALLBACK RESPONSE
 		CommandResult res;
-		res.gidx		= req.gidx;
+		res.gidx		= req;
 		res.deviceID	= myID;
 		res.triangle	= myTriangle;
 		res.elapsedTime = std::chrono::duration<double>(end - start).count();
@@ -161,7 +164,7 @@ static void Execution(Context &								ctx,
 }
 
 std::shared_ptr<bchan<CommandResult>>
-ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in)
+ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<ThreeGrids>> in)
 {
 	auto out = std::make_shared<bchan<CommandResult>>(1 << 4);
 	if (myID >= -1) {
