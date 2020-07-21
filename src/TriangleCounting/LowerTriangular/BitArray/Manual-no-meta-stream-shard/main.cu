@@ -13,6 +13,8 @@
 #include <thread>
 #include <vector>
 
+static size_t ceil(size_t const x, size_t const y) { return (x != 0) ? (1 + ((x - 1) / y)) : 0; }
+
 static uint32_t findMaxGridIndex(fs::path const & folder, std::string const & ext)
 {
 	uint32_t max = 0;
@@ -115,17 +117,25 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 				   cudaGetErrorString(e));
 
 			cudaSetDevice(myID);
+			c.bitmap.lv0.byte =
+				sizeof(uint32_t) * ctx.setting[1] * ceil(GridWidth, 1L << EXP_BITMAP0);
+			c.bitmap.lv0.ptr = (uint32_t *)myMem.buddy->allocate(c.bitmap.lv0.byte);
+			c.bitmap.lv1.byte =
+				sizeof(uint32_t) * ctx.setting[1] * ceil(GridWidth, 1L << EXP_BITMAP1);
+			c.bitmap.lv1.ptr = (uint32_t *)myMem.buddy->allocate(c.bitmap.lv1.byte);
+			cudaMemset(c.bitmap.lv0.ptr, 0x00, c.bitmap.lv0.byte);
+			cudaMemset(c.bitmap.lv1.ptr, 0x00, c.bitmap.lv1.byte);
+
+			cudaSetDevice(myID);
 			c.lookup.G0.byte   = sizeof(Lookup) * GridWidth;
 			c.lookup.G0.ptr	   = (Lookup *)myMem.buddy->allocate(c.lookup.G0.byte);
 			c.lookup.G2.byte   = sizeof(Lookup) * GridWidth;
 			c.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(c.lookup.G2.byte);
 			c.lookup.temp.byte = sizeof(Lookup) * GridWidth;
 			c.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(c.lookup.temp.byte);
-
-			cudaSetDevice(myID);
-			cudaMemset(c.lookup.temp.ptr, 0, c.lookup.temp.byte);
-			cudaMemset(c.lookup.G0.ptr, 0, c.lookup.G0.byte);
-			cudaMemset(c.lookup.G2.ptr, 0, c.lookup.G2.byte);
+			cudaMemset(c.lookup.temp.ptr, 0x00, c.lookup.temp.byte);
+			cudaMemset(c.lookup.G0.ptr, 0x00, c.lookup.G0.byte);
+			cudaMemset(c.lookup.G2.ptr, 0x00, c.lookup.G2.byte);
 
 			cudaSetDevice(myID);
 			cub::DeviceScan::ExclusiveSum(
@@ -137,30 +147,6 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 		}
 
 		ctx.executionManagerCtx.insert({myID, myCtx});
-	} else if (myID == -1) {
-		/*
-		// CPU
-		auto const GridWidth = ctx.grid.width;
-
-		auto & myMem = ctx.dataManagerCtx[myID];
-
-		ExecutionManagerContext myCtx;
-		myCtx.lookup.G0.byte   = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.G0.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G0.byte);
-		myCtx.lookup.G2.byte   = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G2.byte);
-		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
-
-		memset(myCtx.lookup.temp.ptr, 0, myCtx.lookup.temp.byte);
-		memset(myCtx.lookup.G0.ptr, 0, myCtx.lookup.G0.byte);
-		memset(myCtx.lookup.G2.ptr, 0, myCtx.lookup.G2.byte);
-
-		myCtx.count.byte = sizeof(Count);
-		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
-
-		ctx.executionManagerCtx.insert({myID, myCtx});
-		*/
 	}
 }
 
@@ -174,7 +160,7 @@ static void init(Context & ctx, int argc, char * argv[])
 
 	ctx.folderPath = fs::path(fs::path(std::string(argv[1]) + "/").parent_path().string() + "/");
 	ctx.grid.count = findMaxGridIndex(ctx.folderPath, ".row") + 1;
-	ctx.grid.width = (1 << 24);
+	ctx.grid.width = GRIDWIDTH;
 
 	for (int i = 0; i < 3; i++) {
 		ctx.setting[i] = strtol(argv[i + 2], nullptr, 10);

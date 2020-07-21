@@ -73,10 +73,10 @@ static void DataManagerInit(Context & ctx, int myID)
 		cudaStreamCreate(&myCtx.stream);
 	} else if (myID == -1) {
 		// CPU Memory
-		size_t freeMem = (1L << 37) - (1L << 35); // 128GB
-		// size_t freeMem = (1L << 35); // 32GB
-		myCtx.buf	= allocHost<void>(freeMem);
-		myCtx.buddy = std::make_shared<portable_buddy_system>();
+		// size_t freeMem = (1L << 36); // 64GB
+		size_t freeMem = (1L << 34); // 16GB
+		myCtx.buf	   = allocHost<void>(freeMem);
+		myCtx.buddy	   = std::make_shared<portable_buddy_system>();
 		myCtx.buddy->init(memrgn_t{myCtx.buf.get(), freeMem}, 8, 1);
 		myCtx.conn				   = std::make_shared<DataManagerContext::Connections>();
 		myCtx.conn.get()->upstream = -2;
@@ -95,7 +95,6 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 {
 	if (myID > -1) {
 		// GPU
-
 		auto const GridWidth = ctx.grid.width;
 
 		auto & myMem = ctx.dataManagerCtx[myID];
@@ -137,38 +136,14 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 		}
 
 		ctx.executionManagerCtx.insert({myID, myCtx});
-	} else if (myID == -1) {
-		/*
-		// CPU
-		auto const GridWidth = ctx.grid.width;
-
-		auto & myMem = ctx.dataManagerCtx[myID];
-
-		ExecutionManagerContext myCtx;
-		myCtx.lookup.G0.byte   = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.G0.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G0.byte);
-		myCtx.lookup.G2.byte   = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.G2.ptr	   = (Lookup *)myMem.buddy->allocate(myCtx.lookup.G2.byte);
-		myCtx.lookup.temp.byte = sizeof(Lookup) * GridWidth;
-		myCtx.lookup.temp.ptr  = (Lookup *)myMem.buddy->allocate(myCtx.lookup.temp.byte);
-
-		memset(myCtx.lookup.temp.ptr, 0, myCtx.lookup.temp.byte);
-		memset(myCtx.lookup.G0.ptr, 0, myCtx.lookup.G0.byte);
-		memset(myCtx.lookup.G2.ptr, 0, myCtx.lookup.G2.byte);
-
-		myCtx.count.byte = sizeof(Count);
-		myCtx.count.ptr	 = (Count *)myMem.buddy->allocate(myCtx.count.byte);
-
-		ctx.executionManagerCtx.insert({myID, myCtx});
-		*/
 	}
 }
 
 static void init(Context & ctx, int argc, char * argv[])
 {
 	// Argument
-	if (argc != 5) {
-		fprintf(stderr, "usage: %s <folderPath> <streams> <blocks> <threads>\n", argv[0]);
+	if (argc != 2) {
+		fprintf(stderr, "usage: %s <folderPath>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
@@ -176,12 +151,20 @@ static void init(Context & ctx, int argc, char * argv[])
 	ctx.grid.count = findMaxGridIndex(ctx.folderPath, ".row") + 1;
 	ctx.grid.width = (1 << 24);
 
-	for (int i = 0; i < 3; i++) {
-		ctx.setting[i] = strtol(argv[i + 2], nullptr, 10);
-	}
-
 	// get total GPUs
 	cudaGetDeviceCount(&ctx.deviceCount);
+
+	if (ctx.deviceCount == 0) {
+		fprintf(stderr, "No CUDA Capable Devices\n");
+		exit(EXIT_FAILURE);
+	}
+
+	ctx.setting[0] = 1; // streams
+	int temp	   = 0;
+	cudaDeviceGetAttribute(&temp, cudaDevAttrMultiProcessorCount, 0);
+	ctx.setting[1] = temp;
+	cudaDeviceGetAttribute(&temp, cudaDevAttrMaxThreadsPerBlock, 0);
+	ctx.setting[2] = temp;
 
 	// -1     : CPU
 	//  0 ~  N: GPU
