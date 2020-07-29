@@ -86,7 +86,9 @@
         "locale": "cpp",
         "__locale": "cpp",
         "ios": "cpp",
-        "__split_buffer": "cpp"
+        "__split_buffer": "cpp",
+        "charconv": "cpp",
+        "regex": "cpp"
     },
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
     "C_Cpp.autocomplete": "Default",
@@ -94,5 +96,6 @@
     "C_Cpp.intelliSenseEngine": "Default",
     "C_Cpp.formatting": "Default",
     "editor.formatOnSave": true,
-    "editor.formatOnPaste": true
+    "editor.formatOnPaste": false,
+    "C_Cpp.clang_format_fallbackStyle": "WebKit"
 }

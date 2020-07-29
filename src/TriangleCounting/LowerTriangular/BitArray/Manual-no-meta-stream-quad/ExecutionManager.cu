@@ -1,0 +1,183 @@
+#include "ExecutionManager.cuh"
+#include "type.cuh"
+
+#include <array>
+#include <chrono>
+#include <iostream>
+#include <memory>
+#include <thread>
+
+static void Execution(Context &								ctx,
+					  DeviceID								myID,
+					  size_t								myStreamID,
+					  std::shared_ptr<bchan<Command>>		in,
+					  std::shared_ptr<bchan<CommandResult>> out)
+{
+	// printf("myDeviceID: %d, myStreamID: %ld\n", myID, myStreamID);
+	using DataTxCallback = bchan<MemInfo<Vertex>>;
+
+	size_t hitCount = 0, missCount = 0;
+
+	for (auto & req : *in) {
+		Grids								memInfo;
+		std::array<std::array<fiber, 3>, 3> waitGroup;
+		for (uint32_t i = 0; i < 3; i++) {
+			for (uint32_t type = 0; type < 3; type++) {
+				waitGroup[i][type] = fiber([&, myID, i, type] {
+					auto callback = std::make_shared<DataTxCallback>(2);
+
+					Tx tx;
+					tx.method = Method::Ready;
+					tx.key	  = {req[i], (DataType)(type)};
+					tx.cb	  = callback;
+
+					ctx.dataManagerCtx[myID].chan->push(tx);
+
+					for (auto & cbres : *callback) {
+						memInfo[i][type] = cbres;
+					}
+				});
+			}
+		}
+
+		// Must wait all memory info
+		for (auto & row : waitGroup) {
+			for (auto & w : row) {
+				if (w.joinable()) {
+					w.join();
+				}
+			}
+		}
+
+		for (auto & row : memInfo) {
+			for (auto & i : row) {
+				if (i.hit) {
+					hitCount++;
+				} else {
+					missCount++;
+				}
+			}
+		}
+
+		/*
+		printf("Kernel Start:\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n",
+			   req.gidx[0][0],
+			   req.gidx[0][1],
+			   memInfo[0][0].print().c_str(),
+			   memInfo[0][1].print().c_str(),
+			   memInfo[0][2].print().c_str(),
+			   req.gidx[1][0],
+			   req.gidx[1][1],
+			   memInfo[1][0].print().c_str(),
+			   memInfo[1][1].print().c_str(),
+			   memInfo[1][2].print().c_str(),
+			   req.gidx[2][0],
+			   req.gidx[2][1],
+			   memInfo[2][0].print().c_str(),
+			   memInfo[2][1].print().c_str(),
+			   memInfo[2][2].print().c_str());
+				   */
+
+		Count myTriangle = 0;
+		// LAUNCH
+		if (myID > -1) {
+			myTriangle = launchKernelGPU(ctx, myID, myStreamID, memInfo);
+		} else {
+			// myTriangle = launchKernelCPU(ctx, myID, memInfo);
+		}
+
+		/*
+		printf("Kernel End:\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n"
+			   "(%d,%d):[%s,%s,%s]\n",
+			   req.gidx[0][0],
+			   req.gidx[0][1],
+			   memInfo[0][0].print().c_str(),
+			   memInfo[0][1].print().c_str(),
+			   memInfo[0][2].print().c_str(),
+			   req.gidx[1][0],
+			   req.gidx[1][1],
+			   memInfo[1][0].print().c_str(),
+			   memInfo[1][1].print().c_str(),
+			   memInfo[1][2].print().c_str(),
+			   req.gidx[2][0],
+			   req.gidx[2][1],
+			   memInfo[2][0].print().c_str(),
+			   memInfo[2][1].print().c_str(),
+			   memInfo[2][2].print().c_str());
+							   */
+
+		// RELEASE MEMORY
+		for (uint32_t i = 0; i < 3; i++) {
+			for (uint32_t type = 0; type < 3; type++) {
+				waitGroup[i][type] = fiber([&, myID, i, type] {
+					auto callback = std::make_shared<DataTxCallback>(2);
+
+					Tx tx;
+					tx.method = Method::Done;
+					tx.key	  = {req[i], (DataType)(type)};
+					tx.cb	  = callback;
+
+					ctx.dataManagerCtx[myID].chan->push(tx);
+
+					for (auto & cbres : *callback) {
+						memInfo[i][type] = cbres;
+					}
+				});
+			}
+		}
+
+		for (auto & row : waitGroup) {
+			for (auto & w : row) {
+				if (w.joinable()) {
+					w.join();
+				}
+			}
+		}
+
+		// CALLBACK RESPONSE
+		CommandResult res;
+		res.gidx	 = req;
+		res.deviceID = myID;
+		res.triangle = myTriangle;
+
+		out->push(res);
+	}
+
+	printf("HIT: %ld, MISS: %ld, HIT/TOTAL: %.3lf\n",
+		   hitCount,
+		   missCount,
+		   double(hitCount) / double(hitCount + missCount));
+}
+
+std::shared_ptr<bchan<CommandResult>>
+ExecutionManager(Context & ctx, int myID, std::shared_ptr<bchan<Command>> in)
+{
+	auto out = std::make_shared<bchan<CommandResult>>(1 << 4);
+	if (myID >= -1) {
+		std::thread([=, &ctx] {
+			std::vector<std::thread> ts(ctx.setting[0]);
+
+			for (size_t streamID = 0; streamID < ctx.setting[0]; streamID++) {
+				ts[streamID] = std::thread([=, &ctx] { Execution(ctx, myID, streamID, in, out); });
+			}
+
+			for (size_t streamID = 0; streamID < ctx.setting[0]; streamID++) {
+				if (ts[streamID].joinable()) {
+					ts[streamID].join();
+				}
+			}
+
+			ctx.dataManagerCtx[myID].chan->close();
+			out->close();
+		}).detach();
+	} else {
+		out->close();
+	}
+
+	return out;
+}
