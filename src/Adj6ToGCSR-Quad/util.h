@@ -9,14 +9,25 @@
 
 #define __CDEF (1L << 27) // 128MB
 
-void				log(std::string const & s);
-void				stopwatch(std::string const & message, std::function<void()> function);
-uint64_t			be6_le8(uint8_t * in);
+// user interface for testing
+void log(std::string const & s);
+void stopwatch(std::string const & message, std::function<void()> function);
+
+// data conversion and calculation
+uint64_t be6_le8(uint8_t * in);
+size_t	 ceil(size_t const x, size_t const y);
+
+// file and folder
 sp<bchan<fs::path>> fileList(fs::path const & folder, std::string const & extension);
-sp<bchan<RowPos>>	splitAdj6(sp<std::vector<uint8_t>> adj6);
-std::string			fileNameEncode(E32 const & grid, std::string const & ext);
-void				parallelDo(size_t workers, std::function<void(size_t)> func);
-size_t				ceil(size_t const x, size_t const y);
+sp<bchan<fs::path>>
+			fileListOver(fs::path const & folder, std::string const & extension, size_t const over);
+std::string fileNameEncode(E32 const & grid, std::string const & ext);
+
+// parser
+sp<bchan<RowPos>> splitAdj6(sp<std::vector<uint8_t>> adj6);
+
+// parallelism
+void parallelDo(size_t workers, std::function<void(size_t)> func);
 
 template <typename T>
 auto fileSave(fs::path & path, T * data, size_t byte)

@@ -53,7 +53,9 @@ int main(int argc, char * argv[])
 			stage1(
 				inFolder, outFolder, (1 << 24), lowerTriangular, (reorderType > 0), reorderTable);
 		});
-		stopwatch("Stage2", [&] { stage2(outFolder, outFolder); });
+		stopwatch("Stage2", [&] { stage2(outFolder); });
+		stopwatch("Stage3", [&] { stage3(outFolder, (1 << 24)); });
+		stopwatch("Stage4", [&] { stage4(outFolder); });
 	});
 
 	// Finish procedure

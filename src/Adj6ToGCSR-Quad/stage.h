@@ -16,6 +16,8 @@ void stage1(fs::path const &		  inFolder,
 			bool const				  reorder,
 			sp<std::vector<uint64_t>> reorderTable);
 
-void stage2(fs::path const & inFolder, fs::path const & outFolder);
+void stage2(fs::path const & outFolder);
+void stage3(fs::path const & outFolder, uint32_t const gridWidth);
+void stage4(fs::path const & outFolder);
 
 #endif /* E50D46DC_7197_4A21_9962_83851F3004D8 */

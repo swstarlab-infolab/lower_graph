@@ -1,4 +1,4 @@
-set(outFileName Adj6ToGCSR-QuadShard)
+set(outFileName Adj6ToGCSR-Quad)
 
 file(GLOB_RECURSE files ${CMAKE_CURRENT_SOURCE_DIR}/*)
 add_executable(${outFileName} ${files})

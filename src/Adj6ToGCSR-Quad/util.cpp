@@ -69,6 +69,27 @@ uint64_t be6_le8(uint8_t * in)
 	return out;
 }
 
+sp<bchan<fs::path>>
+fileListOver(fs::path const & folder, std::string const & extension, size_t const over)
+{
+	auto out = makeSp<bchan<fs::path>>(16);
+	std::thread([=] {
+		// recursive iteration
+		for (fs::recursive_directory_iterator iter(folder), end; iter != end; iter++) {
+			// check file is not directory and size is not zero
+			if (fs::is_regular_file(iter->status()) && fs::file_size(iter->path()) > over) {
+				if (extension != "" && extension != iter->path().extension()) {
+					continue;
+				}
+
+				out->push(fs::absolute(iter->path()));
+			}
+		}
+		out->close();
+	}).detach();
+	return out;
+}
+
 sp<bchan<fs::path>> fileList(fs::path const & folder, std::string const & extension)
 {
 	auto out = makeSp<bchan<fs::path>>(16);
