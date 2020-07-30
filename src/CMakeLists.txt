@@ -13,10 +13,9 @@ link_directories(
     /usr/local/boost_1_73_0/lib
 )
 
-add_subdirectory(BuddySystem)
 add_subdirectory(Adj6ToGCSR)
 add_subdirectory(Adj6ToEL32)
-add_subdirectory(Adj6ToGCSR-Shard)
 add_subdirectory(Adj6ToGCSR-Quad)
+add_subdirectory(BuddySystem)
 add_subdirectory(GridCSR)
 add_subdirectory(TriangleCounting)

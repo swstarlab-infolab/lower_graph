@@ -357,23 +357,23 @@ inline RequestType get_bit(OffsetType off)
 }
 
 template <typename RequestType, typename OffsetType>
-inline void set_bit(RequestType * bitmap, OffsetType off)
+inline void set_bit(RequestType * bitarr, OffsetType off)
 {
-	bitmap[off / (sizeof(RequestType) * 8)] |=
+	bitarr[off / (sizeof(RequestType) * 8)] |=
 		get_bit<RequestType>(off % (sizeof(RequestType) * 8));
 }
 
 template <typename RequestType, typename OffsetType>
-inline void clear_bit(RequestType * bitmap, OffsetType off)
+inline void clear_bit(RequestType * bitarr, OffsetType off)
 {
-	bitmap[off / (sizeof(RequestType) * 8)] &=
+	bitarr[off / (sizeof(RequestType) * 8)] &=
 		~get_bit<RequestType>(off % (sizeof(RequestType) * 8));
 }
 
 template <typename RequestType, typename OffsetType>
-inline bool test_bit(RequestType * bitmap, OffsetType off)
+inline bool test_bit(RequestType * bitarr, OffsetType off)
 {
-	return bitmap[off / (sizeof(RequestType) * 8)] &
+	return bitarr[off / (sizeof(RequestType) * 8)] &
 		   get_bit<RequestType>(off % (sizeof(RequestType) * 8));
 }
 

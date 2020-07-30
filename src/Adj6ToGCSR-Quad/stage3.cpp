@@ -196,7 +196,7 @@ static auto quad(sp<std::vector<E32>> in, uint32_t const gridWidth, size_t const
 	return out;
 }
 
-void stage3(fs::path const & outFolder, uint32_t const gridWidth)
+void stage3(fs::path const & outFolder, uint32_t const gridWidth, size_t const limitByte)
 {
 	bool exist = true;
 	while (exist) {
@@ -206,7 +206,7 @@ void stage3(fs::path const & outFolder, uint32_t const gridWidth)
 		auto jobs = [&] {
 			auto out = makeSp<bchan<fs::path>>(128);
 			std::thread([=, &exist] {
-				auto fListChan = fileListOver(outFolder, ".el32", (1L << 30));
+				auto fListChan = fileListOver(outFolder, ".el32", limitByte * 2);
 				for (auto & f : *fListChan) {
 					out->push(f);
 					exist = true;

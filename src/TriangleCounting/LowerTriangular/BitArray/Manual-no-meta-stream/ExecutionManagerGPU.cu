@@ -38,13 +38,13 @@ static __global__ void resetLookupTemp(Grid const g, Lookup * luTemp)
 	}
 }
 
-static __device__ void bitmapSet(uint32_t * bm0, uint32_t * bm1, const Vertex vid)
+static __device__ void bitarrSet(uint32_t * bm0, uint32_t * bm1, const Vertex vid)
 {
 	atomicOr(&bm0[vid >> EXP_BITMAP0], 1 << ((vid >> (EXP_BITMAP0 - EXP_BITMAP1)) & 31));
 	atomicOr(&bm1[vid >> EXP_BITMAP1], 1 << (vid & 31));
 }
 
-static __device__ bool bitmapCheck(uint32_t * bm0, uint32_t * bm1, const Vertex vid)
+static __device__ bool bitarrCheck(uint32_t * bm0, uint32_t * bm1, const Vertex vid)
 {
 	if (bm0[vid >> EXP_BITMAP0] & (1 << ((vid >> (EXP_BITMAP0 - EXP_BITMAP1) & 31)))) {
 		return bm1[vid >> EXP_BITMAP1] & (1 << (vid & 31));
@@ -56,12 +56,12 @@ static __device__ bool bitmapCheck(uint32_t * bm0, uint32_t * bm1, const Vertex 
 static __global__ void kernel(Grids const	 g,
 							  Lookup const * lookup0,
 							  Lookup const * lookup2,
-							  uint32_t *	 bitmap0,
-							  uint32_t *	 bitmap1,
+							  uint32_t *	 bitarr0,
+							  uint32_t *	 bitarr1,
 							  Count *		 count)
 {
-	uint32_t * mybm0   = &bitmap0[(GRIDWIDTH >> EXP_BITMAP0) * blockIdx.x];
-	uint32_t * mybm1   = &bitmap1[(GRIDWIDTH >> EXP_BITMAP1) * blockIdx.x];
+	uint32_t * mybm0   = &bitarr0[(GRIDWIDTH >> EXP_BITMAP0) * blockIdx.x];
+	uint32_t * mybm1   = &bitarr1[(GRIDWIDTH >> EXP_BITMAP1) * blockIdx.x];
 	Count	   mycount = 0;
 
 	__shared__ int SHARED[1024];
@@ -82,7 +82,7 @@ static __global__ void kernel(Grids const	 g,
 
 		for (uint32_t g1col_idx = g1col_idx_s + threadIdx.x; g1col_idx < g1col_idx_e;
 			 g1col_idx += blockDim.x) {
-			bitmapSet(mybm0, mybm1, g[1][2][g1col_idx]);
+			bitarrSet(mybm0, mybm1, g[1][2][g1col_idx]);
 		}
 
 		// variable for binary tree intersection
@@ -112,7 +112,7 @@ static __global__ void kernel(Grids const	 g,
 
 				for (uint32_t g0col_idx = g0col_idx_s + threadIdx.x; g0col_idx < g0col_idx_e;
 					 g0col_idx += blockDim.x) {
-					if (bitmapCheck(mybm0, mybm1, g[0][2][g0col_idx])) {
+					if (bitarrCheck(mybm0, mybm1, g[0][2][g0col_idx])) {
 						mycount++;
 					}
 				}
@@ -196,8 +196,8 @@ Count launchKernelGPU(Context & ctx, DeviceID myID, size_t myStreamID, Grids & G
 	kernel<<<blocks, threads, 0, stream>>>(G,
 										   myCtx.lookup.G0.ptr,
 										   myCtx.lookup.G2.ptr,
-										   myCtx.bitmap.lv0.ptr,
-										   myCtx.bitmap.lv1.ptr,
+										   myCtx.bitarr.lv0.ptr,
+										   myCtx.bitarr.lv1.ptr,
 										   myCtx.count.ptr);
 	CUDACHECK();
 

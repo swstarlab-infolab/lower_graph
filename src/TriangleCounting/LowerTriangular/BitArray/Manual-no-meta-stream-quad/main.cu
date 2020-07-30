@@ -76,7 +76,7 @@ static void DataManagerInit(Context & ctx, int myID)
 	} else if (myID == -1) {
 		// CPU Memory
 		// size_t freeMem = (1L << 37) - (1L << 35); // 128GB
-		size_t freeMem = (1L << 33); // 8GB
+		size_t freeMem = (1L << 35); // 32GB
 		myCtx.buf	   = allocHost<void>(freeMem);
 		myCtx.buddy	   = std::make_shared<portable_buddy_system>();
 		myCtx.buddy->init(memrgn_t{myCtx.buf.get(), freeMem}, 8, 1);
@@ -112,14 +112,14 @@ static void ExecutionManagerInit(Context & ctx, int myID)
 				   cudaGetErrorString(e));
 
 			cudaSetDevice(myID);
-			c.bitmap.lv0.byte =
+			c.bitarr.lv0.byte =
 				sizeof(uint32_t) * ctx.setting[1] * ceil(GridWidth, 1L << EXP_BITMAP0);
-			c.bitmap.lv0.ptr = (uint32_t *)myMem.buddy->allocate(c.bitmap.lv0.byte);
-			c.bitmap.lv1.byte =
+			c.bitarr.lv0.ptr = (uint32_t *)myMem.buddy->allocate(c.bitarr.lv0.byte);
+			c.bitarr.lv1.byte =
 				sizeof(uint32_t) * ctx.setting[1] * ceil(GridWidth, 1L << EXP_BITMAP1);
-			c.bitmap.lv1.ptr = (uint32_t *)myMem.buddy->allocate(c.bitmap.lv1.byte);
-			cudaMemset(c.bitmap.lv0.ptr, 0x00, c.bitmap.lv0.byte);
-			cudaMemset(c.bitmap.lv1.ptr, 0x00, c.bitmap.lv1.byte);
+			c.bitarr.lv1.ptr = (uint32_t *)myMem.buddy->allocate(c.bitarr.lv1.byte);
+			cudaMemset(c.bitarr.lv0.ptr, 0x00, c.bitarr.lv0.byte);
+			cudaMemset(c.bitarr.lv1.ptr, 0x00, c.bitarr.lv1.byte);
 
 			cudaSetDevice(myID);
 			c.lookup.G0.byte   = sizeof(Lookup) * GridWidth;

@@ -10,7 +10,7 @@
 sp<std::vector<uint64_t>> stage0(fs::path const & inFolder,
 								 fs::path const & outFolder,
 								 uint64_t const	  maxVID,
-								 uint64_t const	  reorderType)
+								 uint64_t const	  relabelType)
 {
 	tbb::concurrent_vector<Reorder> temp(maxVID + 1);
 
@@ -50,7 +50,7 @@ sp<std::vector<uint64_t>> stage0(fs::path const & inFolder,
 	});
 
 	stopwatch("Stage0, Reorder vertices by rank", [&] {
-		switch (reorderType) {
+		switch (relabelType) {
 		case 1:
 			tbb::parallel_sort(temp.begin(), temp.end(), [](Reorder const & l, Reorder const & r) {
 				if (l.val == 0 && r.val != 0) {

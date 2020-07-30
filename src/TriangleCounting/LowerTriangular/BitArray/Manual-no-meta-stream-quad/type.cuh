@@ -179,7 +179,7 @@ struct ExecutionManagerContext {
 
 		struct {
 			MemInfo<Lookup> lv0, lv1;
-		} bitmap;
+		} bitarr;
 
 		MemInfo<void>  cub;
 		MemInfo<Count> count;

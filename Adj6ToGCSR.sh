@@ -1,1 +1,0 @@
-./build/Adj6ToGCSR $1 $2 RMAT$3-24-lt 1

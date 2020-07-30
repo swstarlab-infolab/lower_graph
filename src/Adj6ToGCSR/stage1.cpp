@@ -54,8 +54,8 @@ static auto mapper(sp<std::vector<uint8_t>> adj6,
 	return out;
 }
 
-static auto mapper_reorder(sp<std::vector<uint8_t>>	 adj6,
-						   sp<std::vector<uint64_t>> reorderTable,
+static auto mapper_relabel(sp<std::vector<uint8_t>>	 adj6,
+						   sp<std::vector<uint64_t>> relabelTable,
 						   sp<bchan<RowPos>>		 in,
 						   uint32_t const			 gridWidth,
 						   bool const				 lowerTriangular)
@@ -67,8 +67,8 @@ static auto mapper_reorder(sp<std::vector<uint8_t>>	 adj6,
 			auto selfloop = uint64_t(0);
 
 			for (uint64_t i = 0; i < dat.cnt; i++) {
-				auto src = reorderTable->at(dat.src);
-				auto dst = reorderTable->at(be6_le8(&(adj6->at(dat.dstStart + i * 6))));
+				auto src = relabelTable->at(dat.src);
+				auto dst = relabelTable->at(be6_le8(&(adj6->at(dat.dstStart + i * 6))));
 
 				if (lowerTriangular && src < dst) {
 					std::swap(src, dst);
@@ -137,8 +137,8 @@ void stage1(fs::path const &		  inFolder,
 			fs::path const &		  outFolder,
 			uint32_t const			  gridWidth,
 			bool const				  lowerTriangular,
-			bool const				  reorder,
-			sp<std::vector<uint64_t>> reorderTable)
+			bool const				  relabel,
+			sp<std::vector<uint64_t>> relabelTable)
 {
 
 	auto fListChan = fileList(inFolder, "");
@@ -151,8 +151,8 @@ void stage1(fs::path const &		  inFolder,
 
 				parallelDo(64, [&](size_t const i) {
 					auto mapped =
-						(reorder) ? mapper_reorder(
-										adj6, reorderTable, rowPosChan, gridWidth, lowerTriangular)
+						(relabel) ? mapper_relabel(
+										adj6, relabelTable, rowPosChan, gridWidth, lowerTriangular)
 								  : mapper(adj6, rowPosChan, gridWidth, lowerTriangular);
 					shuffler(mapped, outFolder, ".el32");
 				});
