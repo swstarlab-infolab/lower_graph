@@ -75,8 +75,8 @@ static void DataManagerInit(Context & ctx, int myID)
 		cudaStreamCreate(&myCtx.stream);
 	} else if (myID == -1) {
 		// CPU Memory
-		// size_t freeMem = (1L << 37) - (1L << 35); // 128GB
-		size_t freeMem = (1L << 35); // 32GB
+		size_t freeMem = (1L << 37); // 128GB
+		//size_t freeMem = (1L << 35); // 32GB
 		myCtx.buf	   = allocHost<void>(freeMem);
 		myCtx.buddy	   = std::make_shared<portable_buddy_system>();
 		myCtx.buddy->init(memrgn_t{myCtx.buf.get(), freeMem}, 8, 1);

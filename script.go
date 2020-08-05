@@ -147,8 +147,8 @@ func main() {
 		saveFileAppend(logFile, []byte("RMAT,shard,stream,block,thread,triangle,time\n"))
 	}
 
+		for shard := 31; shard <= 33; shard++ {
 	for N := 20; N <= 30; N++ {
-		for shard := 29; shard <= 33; shard++ {
 			inputData := "/mnt/nvme/GCSR-Reorder2-Quad-" + strconv.Itoa(shard) + "/RMAT" + strconv.Itoa(N) + "-24-lt-reorder2-quad-" + strconv.Itoa(shard) + "/"
 
 			for stream := 1; stream <= 2; stream++ {
@@ -177,7 +177,7 @@ func main() {
 
 						triangle, time := runCommand(app, inputData, setting)
 
-						finalOutput := fmt.Sprintf("%v,%d,%.6f\n", targetString, triangle, time)
+						finalOutput := fmt.Sprintf("%v%d,%.6f\n", targetString, triangle, time)
 
 						log.Printf("%v", finalOutput)
 						saveFileAppend(logFile, []byte(finalOutput))

@@ -75,8 +75,9 @@ static void DataManagerInit(Context & ctx, int myID)
 		myMem.cacheMtx = std::make_shared<std::mutex>();
 	} else if (myID == -1) {
 		// CPU Memory
-		// size_t freeMem = (1L << 37); // 128GB
-		size_t freeMem = (1L << 35); // 32GB
+		//size_t freeMem = (1L << 37) + (1L << 36); // 192GB
+		size_t freeMem = (1L << 37); // 128GB
+		//size_t freeMem = (1L << 35); // 32GB
 		myMem.buf	   = allocHost<void>(freeMem);
 		myMem.buddy	   = std::make_shared<portable_buddy_system>();
 		myMem.buddy->init(memrgn_t{myMem.buf.get(), freeMem}, 8, 1);
