@@ -32,9 +32,12 @@ int main(int argc, char * argv[])
 		data[i] = std::make_shared<Data::Manager>(i, folderPath);
 	}
 
-	std::vector<std::shared_ptr<Exec::Manager>> exec(devices);
+	std::vector<std::shared_ptr<Exec::Manager>> exec(devices * setting.stream);
 	for (int i = 0; i < devices; i++) {
-		exec[i] = std::make_shared<Exec::Manager>(i, setting, sched, data[i]);
+		for (int j = 0; j < setting.stream; j++) {
+			exec[i * setting.stream + j] =
+				std::make_shared<Exec::Manager>(i, j, setting, sched, data[i]);
+		}
 	}
 
 	sched->run();
@@ -47,27 +50,29 @@ int main(int argc, char * argv[])
 	Exec::Result result = {
 		0,
 	};
-	std::vector<Exec::OutType> execOut(devices);
+	std::vector<Exec::OutType> execOut(devices * setting.stream);
 
 	auto start = std::chrono::system_clock::now();
 
-	for (int i = 0; i < devices; i++) {
+	for (int i = 0; i < devices * setting.stream; i++) {
 		execOut[i] = exec[i]->run();
 	}
 
 	/// Sync workers
-	pThread(devices, [&](size_t const i) {
+	pThread(devices * setting.stream, [&](size_t const i) {
 		Count  myTotal = 0;
 		double myLoad = 0.0, myKernel = 0.0;
 		for (auto & res : *execOut[i]) {
-			printf("Exec::Manager=%ld, %s / %s / %s => %lld, %.6lf(sec), %.6lf(sec)\n",
-				   i,
-				   res.job[0].string().c_str(),
-				   res.job[1].string().c_str(),
-				   res.job[2].string().c_str(),
-				   res.triangle,
-				   res.time.load,
-				   res.time.kernel);
+			fprintf(stdout,
+					"Device=%d / Stream=%d / %s / %s / %s => %lld / %.6lf(sec) / %.6lf(sec)\n",
+					res.deviceID,
+					res.streamID,
+					res.job[0].string().c_str(),
+					res.job[1].string().c_str(),
+					res.job[2].string().c_str(),
+					res.triangle,
+					res.time.load,
+					res.time.kernel);
 			myTotal += res.triangle;
 			myLoad += res.time.load;
 			myKernel += res.time.kernel;
@@ -83,16 +88,17 @@ int main(int argc, char * argv[])
 
 	auto end = std::chrono::system_clock::now();
 
-	printf("total triangles: %lld\n"
-		   "total load: %.6lf, per-Exec load: %.6lf\n"
-		   "total kernel: %.6lf, per-Exec load: %.6lf\n"
-		   "REALTIME: %.6lf\n",
-		   result.triangle,
-		   result.time.load,
-		   result.time.load / double(devices),
-		   result.time.kernel,
-		   result.time.kernel / double(devices),
-		   std::chrono::duration<double>(end - start).count());
+	fprintf(stdout,
+			"total triangles: %lld\n"
+			"total load time: %.6lf, per-Exec load time: %.6lf\n"
+			"total kernel time: %.6lf, per-Exec load time: %.6lf\n"
+			"REALTIME: %.6lf\n",
+			result.triangle,
+			result.time.load,
+			result.time.load / double(devices),
+			result.time.kernel,
+			result.time.kernel / double(devices),
+			std::chrono::duration<double>(end - start).count());
 
 	return 0;
 }

@@ -159,7 +159,6 @@ void Manager::run()
 
 Manager::Manager(fs::path const & folder) : folderPath(folder)
 {
-	printf("Constructor: Sched::Manager\n");
 
 	for (fs::recursive_directory_iterator curr(this->folderPath), end; curr != end; ++curr) {
 		if (fs::is_regular_file(curr->path()) && fs::file_size(curr->path()) > 0 &&
@@ -178,7 +177,8 @@ Manager::Manager(fs::path const & folder) : folderPath(folder)
 	}
 
 	this->out = std::make_shared<boost::fibers::buffered_channel<JobType>>(1 << 4);
+	printf("Constructor: Sched::Manager, Init Complete\n");
 }
 
-Manager::~Manager() { printf("Destructor: Sched::Manager\n"); }
+Manager::~Manager() { printf("Destructor: Sched::Manager, No error\n"); }
 } // namespace Sched

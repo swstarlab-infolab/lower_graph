@@ -11,6 +11,7 @@
 namespace Exec
 {
 struct Result {
+	int			   deviceID, streamID;
 	Sched::JobType job;
 	Count		   triangle;
 	struct {
@@ -54,6 +55,7 @@ public:
 	Count	launchKernelGPU(Grids & G);
 
 	Manager(int const						deviceID,
+			int const						streamID,
 			GPUSetting const				gpuSetting,
 			std::shared_ptr<Sched::Manager> sched,
 			std::shared_ptr<Data::Manager>	data);
@@ -69,6 +71,7 @@ private:
 
 	cudaStream_t					myStream;
 	int								deviceID;
+	int								streamID;
 	std::shared_ptr<Sched::Manager> sched;
 	std::shared_ptr<Data::Manager>	data;
 	GPUSetting						gpuSetting;

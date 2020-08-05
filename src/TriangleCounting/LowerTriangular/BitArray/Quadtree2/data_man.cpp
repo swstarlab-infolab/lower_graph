@@ -29,7 +29,6 @@ namespace Data
 Manager::Manager(int const deviceID, fs::path const & folderPath)
 	: deviceID(deviceID), folderPath(folderPath)
 {
-	printf("Constructor: Data::Manager, deviceId=%d\n", this->deviceID);
 
 	// Allocate Memory
 	cudaSetDevice(this->deviceID);
@@ -68,11 +67,12 @@ Manager::Manager(int const deviceID, fs::path const & folderPath)
 	this->reqQ		   = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 4);
 	this->doneQ		   = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 4);
 	this->reqMustAlloc = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 4);
+
+	printf("Constructor: Data::Manager, deviceId=%d, Init Complete\n", this->deviceID);
 }
 
 Manager::~Manager()
 {
-	printf("Destructor: Data::Manager\n");
 
 	if (!this->reqQ->is_closed()) {
 		this->reqQ->close();
@@ -104,6 +104,8 @@ Manager::~Manager()
 	// Reset device
 	cudaDeviceReset();
 	CUDACHECK();
+
+	printf("Destructor: Data::Manager, No error\n");
 }
 
 void * Manager::alloc(size_t const size) { return this->mem.buddy->allocate(size); }

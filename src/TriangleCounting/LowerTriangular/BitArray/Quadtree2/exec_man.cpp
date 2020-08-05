@@ -34,6 +34,9 @@ OutType Manager::run()
 				res.time.kernel = std::chrono::duration<double>(end - start).count();
 			}
 
+			res.deviceID = this->deviceID;
+			res.streamID = this->streamID;
+
 			out->push(res);
 
 			for (int i = 0; i < 9; i++) {
@@ -47,6 +50,6 @@ OutType Manager::run()
 	return out;
 }
 
-Manager::~Manager() { printf("Destructor: Exec::Manager\n"); }
+Manager::~Manager() { printf("Destructor: Exec::Manager, No Error\n"); }
 
 } // namespace Exec
