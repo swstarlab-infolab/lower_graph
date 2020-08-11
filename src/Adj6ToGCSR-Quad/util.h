@@ -1,6 +1,23 @@
 #ifndef F3EBF245_52E8_4579_8E93_6A63B9854C05
 #define F3EBF245_52E8_4579_8E93_6A63B9854C05
 
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+
+#define assert_errno(x)                                       \
+	do {                                                      \
+		if (!(x)) {                                           \
+			fprintf(stderr,                                   \
+					"[assert_errno] %s:%d, errno: %d (%s)\n", \
+					__FILE__,                                 \
+					__LINE__,                                 \
+					errno,                                    \
+					strerror(errno));                         \
+			exit(EXIT_FAILURE);                               \
+		}                                                     \
+	} while (0);
+
 #include "type.h"
 
 #include <fcntl.h>

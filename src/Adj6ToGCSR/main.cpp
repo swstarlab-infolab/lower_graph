@@ -16,7 +16,7 @@ int main(int argc, char * argv[])
 	// Parse argument
 	switch (argc) {
 	case 7:
-		maxVID		= (1 << strtol(argv[5], nullptr, 10));
+		maxVID		= (1L << strtol(argv[5], nullptr, 10));
 		relabelType = strtol(argv[6], nullptr, 10);
 	case 5:
 		inFolder  = fs::absolute(fs::path(std::string(argv[1])));
@@ -51,7 +51,7 @@ int main(int argc, char * argv[])
 		}
 		stopwatch("Stage1", [&] {
 			stage1(
-				inFolder, outFolder, (1 << 24), lowerTriangular, (relabelType > 0), relabelTable);
+				inFolder, outFolder, (1L << 24), lowerTriangular, (relabelType > 0), relabelTable);
 		});
 		stopwatch("Stage2", [&] { stage2(outFolder, outFolder); });
 	});

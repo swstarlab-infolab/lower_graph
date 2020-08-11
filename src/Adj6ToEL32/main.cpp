@@ -37,7 +37,7 @@ int main(int argc, char * argv[])
 	// Start procedure
 	stopwatch("Total Procedure", [&] {
 		sp<std::vector<uint64_t>> relabelTable;
-		stopwatch("Stage1", [&] { stage1(inFolder, outFolder, (1 << 24), lowerTriangular); });
+		stopwatch("Stage1", [&] { stage1(inFolder, outFolder, (1L << 24), lowerTriangular); });
 		stopwatch("Stage2", [&] { stage2(outFolder, outFolder); });
 	});
 

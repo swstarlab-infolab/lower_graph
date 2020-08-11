@@ -64,9 +64,9 @@ Manager::Manager(int const deviceID, fs::path const & folderPath)
 
 	this->mem.cache.clear();
 
-	this->reqQ		   = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 4);
-	this->doneQ		   = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 4);
-	this->reqMustAlloc = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 4);
+	this->reqQ		   = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 8);
+	this->doneQ		   = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 8);
+	this->reqMustAlloc = std::make_shared<boost::fibers::buffered_channel<Req>>(1 << 8);
 
 	printf("Constructor: Data::Manager, deviceId=%d, Init Complete\n", this->deviceID);
 }

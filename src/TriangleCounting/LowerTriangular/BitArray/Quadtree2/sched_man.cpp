@@ -176,7 +176,7 @@ Manager::Manager(fs::path const & folder) : folderPath(folder)
 		}
 	}
 
-	this->out = std::make_shared<boost::fibers::buffered_channel<JobType>>(1 << 4);
+	this->out = std::make_shared<boost::fibers::buffered_channel<JobType>>(1 << 8);
 	printf("Constructor: Sched::Manager, Init Complete\n");
 }
 

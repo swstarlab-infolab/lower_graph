@@ -17,7 +17,7 @@ int main(int argc, char * argv[])
 	// Parse argument
 	switch (argc) {
 	case 8:
-		maxVID		= (1 << strtol(argv[6], nullptr, 10));
+		maxVID		= (1L << strtol(argv[6], nullptr, 10));
 		relabelType = strtol(argv[7], nullptr, 10);
 	case 6:
 		inFolder  = fs::absolute(fs::path(std::string(argv[1])));
@@ -36,6 +36,16 @@ int main(int argc, char * argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	fprintf(stdout,
+			"inFolder=%s, outFolder=%s, lowerTriangular=%s, maxVID=%ld, relabelType=%ld, "
+			"limitByte=%ld\n",
+			inFolder.c_str(),
+			outFolder.c_str(),
+			(lowerTriangular) ? "true" : "false",
+			maxVID,
+			relabelType,
+			limitByte);
+
 	// Create output folder
 	if (!fs::exists(outFolder)) {
 		if (!fs::create_directories(outFolder)) {
@@ -53,7 +63,7 @@ int main(int argc, char * argv[])
 		}
 		stopwatch("Stage1", [&] {
 			stage1(
-				inFolder, outFolder, (1 << 24), lowerTriangular, (relabelType > 0), relabelTable);
+				inFolder, outFolder, (1L << 24), lowerTriangular, (relabelType > 0), relabelTable);
 		});
 		stopwatch("Stage2", [&] { stage2(outFolder); });
 		stopwatch("Stage3", [&] { stage3(outFolder, (1 << 24), limitByte); });

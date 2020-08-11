@@ -1,0 +1,1 @@
+cmake .. > /dev/null && make -j > /dev/null

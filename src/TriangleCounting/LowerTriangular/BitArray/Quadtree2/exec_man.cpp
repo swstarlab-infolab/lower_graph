@@ -8,7 +8,7 @@ namespace Exec
 {
 OutType Manager::run()
 {
-	auto out = std::make_shared<boost::fibers::buffered_channel<Result>>(1 << 4);
+	auto out = std::make_shared<boost::fibers::buffered_channel<Result>>(1 << 8);
 	std::thread([=] {
 		for (auto & job : *this->sched->out) {
 			Result res;
