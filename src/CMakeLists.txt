@@ -4,15 +4,20 @@ set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
-    /usr/local/boost_1_73_0/include
+    /usr/local/boost/include
     /usr/local/gdrcopy/include
-    #/opt/at13.0/lib/gcc/powerpc64le-linux-gnu/9.3.1/include
+    #/usr/local/rmm/include
+    /usr/lib/gcc/powerpc64le-linux-gnu/7/include
+    /usr/local/tbb/include
 )
 
 link_directories(
     ${CMAKE_SOURCE_DIR}/lib/${CMAKE_SYSTEM_PROCESSOR}
-    /usr/local/boost_1_73_0/lib
-    /usr/local/gdrcopy/lib64
+    /usr/local/boost/lib
+    /usr/local/gdrcopy/lib
+    #/usr/local/rmm/lib
+
+    /usr/local/tbb/lib
 )
 
 add_subdirectory(Adj6ToGCSR)
