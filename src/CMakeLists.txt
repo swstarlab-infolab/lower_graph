@@ -6,18 +6,19 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/include
     /usr/local/boost/include
     /usr/local/gdrcopy/include
-    #/usr/local/rmm/include
+    /usr/local/rmm/include
     /usr/lib/gcc/powerpc64le-linux-gnu/7/include
     /usr/local/tbb/include
+    /usr/local/jemalloc/include
 )
 
 link_directories(
     ${CMAKE_SOURCE_DIR}/lib/${CMAKE_SYSTEM_PROCESSOR}
     /usr/local/boost/lib
     /usr/local/gdrcopy/lib
-    #/usr/local/rmm/lib
-
+    /usr/local/rmm/lib
     /usr/local/tbb/lib
+    /usr/local/jemalloc/lib
 )
 
 add_subdirectory(Adj6ToGCSR)

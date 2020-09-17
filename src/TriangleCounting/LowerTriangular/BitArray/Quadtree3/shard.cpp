@@ -58,19 +58,19 @@ void ShardRange::conv(ShardIndex const & in)
 
 	this->depth = in.depth;
 	for (size_t i = 0; i < this->range.size(); i++) {
-		this->range[i][s] = in.grid[i] * (1 << in.depth) + in.shard[i];
-		this->range[i][t] = this->range[i][s] + 1;
+		this->range[i][s] = in.grid[i] * (1UL << in.depth) + in.shard[i];
+		this->range[i][t] = this->range[i][s] + 1UL;
 	}
 }
 
-bool ShardRange::increase(uint32_t const depth)
+bool ShardRange::increase(size_t const depth)
 {
 	auto diff = depth - this->depth;
 
 	if (diff > 0) {
 		for (auto & i : this->range) {
 			for (auto & elem : i) {
-				elem *= (1 << diff);
+				elem *= (1UL << diff);
 			}
 		}
 		this->depth = depth;
