@@ -1,4 +1,5 @@
 add_subdirectory(Manual-no-meta-stream)
 add_subdirectory(Manual-no-meta-stream-quad)
 add_subdirectory(Quadtree2)
-add_subdirectory(Quadtree3)
+#add_subdirectory(Quadtree3-notyet)
+add_subdirectory(Quadtree3.1)

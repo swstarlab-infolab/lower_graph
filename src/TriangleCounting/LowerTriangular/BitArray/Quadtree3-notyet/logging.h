@@ -6,11 +6,10 @@
 #include <stdio.h>
 #include <string.h>
 
-extern std::mutex __logging_mutex;
-
 std::string currTimeDate();
 
-#define DEBUG
+//#define DEBUG
+
 #ifdef DEBUG
 #define LOG(str)                                                                            \
 	do {                                                                                    \

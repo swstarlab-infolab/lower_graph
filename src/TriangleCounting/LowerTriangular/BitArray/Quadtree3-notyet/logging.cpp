@@ -5,8 +5,6 @@
 #include <sstream>
 #include <string>
 
-std::mutex __logging_mutex;
-
 std::string currTimeDate()
 {
 	auto now	   = std::chrono::system_clock::now();

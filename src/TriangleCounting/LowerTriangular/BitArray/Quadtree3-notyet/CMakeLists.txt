@@ -6,15 +6,10 @@ file(GLOB_RECURSE
 
 cuda_add_executable(${MY_EXE_NAME} ${MY_SRC_FILES})
 
-#add_dependencies(${MY_EXE_NAME} GridCSR BuddySystem)
-
 target_link_libraries(${MY_EXE_NAME}
     pthread
     stdc++fs
-    #boost_fiber
-    #boost_context
-    #gdrapi
-    #cuda
+    mysqlpp
     mysqlclient
     jemalloc
 )

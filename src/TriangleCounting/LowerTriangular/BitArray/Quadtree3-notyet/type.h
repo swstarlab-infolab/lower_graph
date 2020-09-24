@@ -16,6 +16,12 @@ namespace fs = std::filesystem;
 #define EXP_BITMAP0 (12UL)
 #define EXP_BITMAP1 (5UL)
 
+struct DataInfo {
+	void *	 addr;
+	size_t	 byte;
+	fs::path path;
+};
+
 using Count					   = unsigned long long int;
 char const * const EXTENSION[] = {".row", ".ptr", ".col"};
 

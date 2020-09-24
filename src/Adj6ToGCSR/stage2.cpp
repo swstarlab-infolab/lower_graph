@@ -68,7 +68,8 @@ static auto dedup(sp<std::vector<E32>> in)
 
 	// printf("insz: %ld, sorted\n", in->size());
 	// set bit 1 which is left != right (not the case: left == right)
-	std::atomic<uint64_t> ones = 0;
+	std::atomic<uint64_t> ones;
+	ones.store(0);
 	tbb::parallel_for(
 		tbb::blocked_range<size_t>(0, in->size() - 1),
 		[&](tbb::blocked_range<size_t> const & r) {
@@ -187,7 +188,8 @@ static void writeCSR(fs::path const outTarget, sp<std::vector<E32>> in)
 			tbb::auto_partitioner());
 
 		// set bit 1 which is left != right (not the case: left == right)
-		std::atomic<uint64_t> ones = 0;
+		std::atomic<uint64_t> ones;
+		ones.store(0);
 		tbb::parallel_for(
 			tbb::blocked_range<size_t>(1, in->size()),
 			[&](tbb::blocked_range<size_t> const & r) {

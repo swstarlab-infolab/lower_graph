@@ -1,5 +1,5 @@
 set(CMAKE_CXX_COMPILER ${CXX})
-set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++17")
+set(CMAKE_CXX_FLAGS "-Wall -O3 -std=c++14")
 #set(CMAKE_CXX_FLAGS "-Wall -Og -std=c++17 -g0")
 
 include_directories(
@@ -10,6 +10,7 @@ include_directories(
     /usr/lib/gcc/powerpc64le-linux-gnu/7/include
     /usr/local/tbb/include
     /usr/local/jemalloc/include
+    /usr/local/mysql++/include
 )
 
 link_directories(
@@ -19,6 +20,7 @@ link_directories(
     /usr/local/rmm/lib
     /usr/local/tbb/lib
     /usr/local/jemalloc/lib
+    /usr/local/mysql++/lib
 )
 
 add_subdirectory(Adj6ToGCSR)
