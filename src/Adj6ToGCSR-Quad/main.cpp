@@ -65,6 +65,7 @@ int main(int argc, char * argv[])
 			stage1(
 				inFolder, outFolder, (1L << 24), lowerTriangular, (relabelType > 0), relabelTable);
 		});
+
 		stopwatch("Stage2", [&] { stage2(outFolder); });
 		stopwatch("Stage3", [&] { stage3(outFolder, (1 << 24), limitByte); });
 		stopwatch("Stage4", [&] { stage4(outFolder); });

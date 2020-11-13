@@ -103,9 +103,6 @@ int main(int argc, char * argv[])
 					myPool.join();
 
 					sched.finishJob(grid3, triangles, load_time, kernel_time);
-
-					// std::cin.ignore();
-
 				} else {
 					LOGF("I am %d ==> Job: <%ld, %ld, %ld> Halting",
 						 myDevID,

@@ -32,7 +32,7 @@ struct DataManagerKey {
 class KeyValueFileCache
 {
 private:
-	enum FileState { notexist, exist };
+	enum FileState { notexist, loading, exist, evicting };
 
 	struct FileInfoValue {
 		std::mutex lock;
@@ -72,16 +72,32 @@ private:
 	// DeviceStreams
 	std::vector<cudaStream_t> cudaLoadingStream;
 
-	bool tryAlloc(int const device_id, void ** addr, size_t byte);
-	void mustDealloc(int const device_id, void * addr, size_t byte);
-	void loadSSDtoCPU(fs::path const & path, void * to, size_t byte);
-	void loadSSDtoGPU(int const device_id, fs::path const & path, void * to, size_t byte);
+	// hashmap functions
+	bool refCountUpForExist(FileInfoValue & target, DataInfo<void> & result);
+	bool changeState(FileInfoValue & target, FileState const from, FileState const to);
+
+	// hashmap function: for GPU-GPU
+	bool
+	tryPrepareNVLink(int const otherDeviceID, DataManagerKey const & key, DataInfo<void> & info);
+
+	// hashmap function: for my device
+	bool tryAlloc(int const myDeviceID, void ** addr, size_t byte);
+	void mustDealloc(int const myDeviceID, void * addr, size_t byte);
+
+	// loading function
+	void loadToMe(int const				 myDeviceID,
+				  int const				 otherDeviceID,
+				  FileInfoValue const &	 myInfo,
+				  DataInfo<void> const & otherInfo);
 
 public:
+	int devices;
+
 	void init(GridInfo const & gridInfo);
 	~KeyValueFileCache() noexcept;
-	DataInfo mustPrepare(int device_id, DataManagerKey const & key);
-	void	 done(int device_id, DataManagerKey const & key);
+
+	DataInfo<void> mustPrepare(int const myDeviceID, DataManagerKey const & key);
+	void		   done(int const myDeviceID, DataManagerKey const & key);
 };
 
 #endif /* D386761A_51A2_4858_ABA2_F75F105E1654 */

@@ -88,7 +88,8 @@
         "ios": "cpp",
         "__split_buffer": "cpp",
         "charconv": "cpp",
-        "regex": "cpp"
+        "regex": "cpp",
+        "slist": "cpp"
     },
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
     "C_Cpp.autocomplete": "Default",
@@ -97,5 +98,8 @@
     "C_Cpp.formatting": "Default",
     "editor.formatOnSave": true,
     "editor.formatOnPaste": false,
-    "C_Cpp.clang_format_fallbackStyle": "WebKit"
+    "C_Cpp.clang_format_fallbackStyle": "WebKit",
+    "cmake.buildEnvironment": {
+        "CMAKE_MAKE_PROGRAM": "make"
+    }
 }

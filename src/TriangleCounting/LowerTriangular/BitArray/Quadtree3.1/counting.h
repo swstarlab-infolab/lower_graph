@@ -25,4 +25,14 @@ public:
 };
 */
 
+#include "base/type.h"
+
+using Grid	= std::array<DataInfo<uint32_t>, 3>;
+using Grids = std::array<Grid, 3>;
+
+using Lookup  = std::vector<uint32_t>;
+using Lookups = std::array<Lookup, 3>;
+
+Count countingCPU(Grids const & Gs, Lookups & Ls);
+
 #endif /* DD290292_80F2_4286_9FBC_3BD2FE246214 */

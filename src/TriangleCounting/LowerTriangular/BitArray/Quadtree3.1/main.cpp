@@ -1,5 +1,6 @@
 #include "base/type.h"
 //#include "counting.h"
+#include "counting.h"
 #include "kvfilecache.h"
 #include "scheduler.h"
 #include "util/logging.h"
@@ -29,102 +30,111 @@ int main(int argc, char * argv[])
 	cache.init(gridInfo);
 	LOG("Complete: cache init");
 
+	cache.devices = 0;
+
 	Scheduler sched;
 	sched.init(gridInfo);
 	LOG("Complete: scheduler init");
 
-	/*
-		std::vector<std::thread> runner(gpus + 1);
+	std::vector<std::thread> runner(cache.devices + 1);
 
-		for (int myDevID = -1; myDevID < gpus; myDevID++) {
+#ifdef CPUOFF
+	for (int myDevID = 0; myDevID < cache.devices; myDevID++) {
+#else
+	for (int myDevID = -1; myDevID < cache.devices; myDevID++) {
+#endif
+		runner[myDevID + 1] = std::thread([&, myDevID] {
 			LOGF("runner %d launching...", myDevID);
-			runner[myDevID] = std::thread([&, myDevID] {
-				std::array<std::array<DataInfo, 3>, 3> info;
+			std::array<std::array<DataInfo<void>, 3>, 3> info;
+			Job											 job;
 
-				LOGF("I am %d ==> start!", myDevID);
+			Lookups Ls;
+			for (auto & L : Ls) {
+				L.resize((1UL << 24) + 1);
+			}
 
-				while (true) {
-					auto grid3 = sched.fetchJob(myDevID);
+			while (sched.fetchJob(myDevID, job)) {
+				// LOGF("I am %d ==> Job: <%d, %d, %d>", myDevID, job[0], job[1], job[2]);
+				Count  triangles = 0L;
+				double load_time = 0.0, kernel_time = 0.0;
 
-					if (grid3 != sched.jobHalt) {
+				{
+					auto start = std::chrono::system_clock::now();
 
-						LOGF("I am %d ==> Job: <%ld, %ld, %ld>", myDevID, grid3[0], grid3[1],
-	   grid3[2]);
+					boost::asio::thread_pool myPool(9);
 
-						size_t triangles = 0L;
-						double load_time = 0.0, kernel_time = 0.0;
+					for (int g = 0; g < 3; g++) {
+						for (int t = 0; t < 3; t++) {
+							boost::asio::post(myPool, [&, g, t] {
+								DataManagerKey key;
+								key.gridID	 = job[g];
+								key.fileType = t;
 
-						{
-							auto start = std::chrono::system_clock::now();
-
-							boost::asio::thread_pool myPool(9);
-
-							for (int g = 0; g < 3; g++) {
-								for (int t = 0; t < 3; t++) {
-									boost::asio::post(myPool, [=, &info, &cache] {
-										MemReqInfo reqInfo;
-										reqInfo.device_id = myDevID;
-										reqInfo.grid_id	  = grid3[g];
-										reqInfo.file_type = t;
-
-										// LOGF("reqInfo device_id grid_id file_type = %d, %ld, %d",
-										// reqInfo.device_id, reqInfo.grid_id, reqInfo.file_type);
-										info[g][t] = cache.load(reqInfo);
-									});
-								}
-							}
-
-							myPool.join();
-
-							auto end  = std::chrono::system_clock::now();
-							load_time = std::chrono::duration<double>(end - start).count();
+								info[g][t] = cache.mustPrepare(myDevID, key);
+							});
 						}
+					}
 
-						{
-							auto start	= std::chrono::system_clock::now();
-							triangles	= counting(info);
-							auto end	= std::chrono::system_clock::now();
-							kernel_time = std::chrono::duration<double>(end - start).count();
-						}
+					myPool.join();
 
-						boost::asio::thread_pool myPool(9);
+					auto end  = std::chrono::system_clock::now();
+					load_time = std::chrono::duration<double>(end - start).count();
+				}
+
+				{
+					auto start = std::chrono::system_clock::now();
+					if (myDevID < 0) {
+						Grids Gs;
 						for (int g = 0; g < 3; g++) {
 							for (int t = 0; t < 3; t++) {
-								boost::asio::post(myPool, [&, g, t] {
-									MemReqInfo reqInfo;
-									reqInfo.device_id = myDevID;
-									reqInfo.grid_id	  = grid3[g];
-									reqInfo.file_type = t;
-
-									cache.done(reqInfo);
-								});
+								Gs[g][t].addr = (uint32_t *)info[g][t].addr;
+								Gs[g][t].byte = info[g][t].byte;
 							}
 						}
-
-						myPool.join();
-
-						sched.finishJob(grid3, triangles, load_time, kernel_time);
-
-						// std::cin.ignore();
-
+						triangles = countingCPU(Gs, Ls);
 					} else {
-						LOGF("I am %d ==> Job: <%ld, %ld, %ld> Halting",
-							 myDevID,
-							 grid3[0],
-							 grid3[1],
-							 grid3[2]);
-						break;
+						// triangles	= countingGPU(info);
+					}
+					auto end	= std::chrono::system_clock::now();
+					kernel_time = std::chrono::duration<double>(end - start).count();
+				}
+
+				boost::asio::thread_pool myPool(9);
+				for (int g = 0; g < 3; g++) {
+					for (int t = 0; t < 3; t++) {
+						boost::asio::post(myPool, [&, g, t] {
+							DataManagerKey key;
+							key.gridID	 = job[g];
+							key.fileType = t;
+
+							cache.done(myDevID, key);
+						});
 					}
 				}
-			});
-		}
 
-		for (size_t i = 0; i < runner.size(); i++) {
-			if (runner[i].joinable()) {
-				runner[i].join();
+				myPool.join();
+
+				sched.recordJobResult(job, triangles, load_time, kernel_time);
+
+				// std::cin.ignore();
+				LOGF("I am %2d ==> Job: <%4d, %4d, %4d> done: triangles=%lld, loadtime=%lf, "
+					 "kerneltime=%lf",
+					 myDevID,
+					 job[0],
+					 job[1],
+					 job[2],
+					 triangles,
+					 load_time,
+					 kernel_time);
 			}
+		});
+	}
+
+	for (size_t i = 0; i < runner.size(); i++) {
+		if (runner[i].joinable()) {
+			runner[i].join();
 		}
-		*/
+	}
 
 	return 0;
 }

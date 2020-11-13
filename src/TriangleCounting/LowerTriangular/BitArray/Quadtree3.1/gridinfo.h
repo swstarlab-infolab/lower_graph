@@ -5,6 +5,7 @@
 #include "base/type.h"
 
 #include <array>
+#include <string.h>
 #include <unordered_map>
 #include <vector>
 
@@ -15,7 +16,20 @@ struct GridInfoValue {
 	std::array<uint32_t, 2>				 shard;
 	std::array<std::array<size_t, 2>, 2> range;
 	std::array<size_t, 3>				 byte;
-	std::array<fs::path, 3>				 path;
+	std::array<std::string, 3>			 path;
+
+	GridInfoValue() { memset((void *)this, 0x00, sizeof(*this)); }
+
+	GridInfoValue(GridInfoValue const & copy)
+	{
+		this->id	= copy.id;
+		this->grid	= copy.grid;
+		this->depth = copy.depth;
+		this->shard = copy.shard;
+		this->range = copy.range;
+		this->byte	= copy.byte;
+		this->path	= copy.path;
+	}
 };
 
 // using GridInfo = std::vector<GridInfoValue>;

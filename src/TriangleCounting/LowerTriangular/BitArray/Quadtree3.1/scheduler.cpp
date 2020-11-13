@@ -20,15 +20,27 @@
 
 void Scheduler::init(GridInfo const & gridInfo)
 {
-	// 아랫 부분 처리해야 함
-	/*
-		tbb::parallel_sort(
-			gridInfo.begin(), gridInfo.end(), [](GridInfoValue const & l, GridInfoValue const & r) {
-				return l.byte[2] > r.byte[2];
-			});
 
-		this->criteria = gridInfo[gridInfo.size() / 5].byte[2];
-		*/
+#ifdef CPUOFF
+	this->criteria = 0;
+#else
+	std::vector<GridInfoValue> temp(gridInfo.hashmap.size());
+
+	size_t pos = 0;
+	for (auto & e : gridInfo.hashmap) {
+		temp[pos] = *e.second;
+		pos++;
+	}
+
+	tbb::parallel_sort(
+		temp.begin(), temp.end(), [](GridInfoValue const & l, GridInfoValue const & r) {
+			return l.byte[2] > r.byte[2];
+		});
+	// this->criteria = temp[temp.size() / 5].byte[2];
+	this->criteria = ULONG_MAX;
+#endif
+
+	// LOGF("this->criteria=%ld", this->criteria);
 
 	boost::asio::thread_pool myPool(std::thread::hardware_concurrency());
 
@@ -80,108 +92,25 @@ void Scheduler::init(GridInfo const & gridInfo)
 
 bool Scheduler::fetchJob(int const device_id, Job & job)
 {
-	/*
-	mysqlpp::Connection conn;
-	mysqlConnect(conn);
-
-	auto q = conn.query();
+	bool myQueueResult = false;
 
 	if (device_id < 0) {
-		// CPU
-		q = conn.query(sprn("\
-			UPDATE IGNORE jobs AS j\
-			SET j.device_id = %ld, j.state = 'RUNNING'\
-			WHERE\
-				(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid0_id) < %ld AND\
-				(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid1_id) < %ld AND\
-				(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid2_id) < %ld AND\
-				j.state = 'PENDING'\
-			ORDER BY j.grid0_id, j.grid1_id, j.grid2_id ASC\
-			LIMIT 1;",
-							device_id,
-							this->criteria,
-							this->criteria,
-							this->criteria));
+		myQueueResult = this->jobsCPU.try_pop(job);
 	} else {
-		// GPU
-		q = conn.query(sprn("\
-			UPDATE IGNORE jobs AS j\
-			SET j.device_id = %ld, j.state = 'RUNNING'\
-			WHERE\
-				((SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid0_id) >= %ld OR\
-				(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid1_id) >= %ld OR\
-				(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid2_id) >= %ld) AND\
-				j.state = 'PENDING'\
-			ORDER BY j.grid0_id, j.grid1_id, j.grid2_id ASC\
-			LIMIT 1;",
-							device_id,
-							this->criteria,
-							this->criteria,
-							this->criteria));
+		myQueueResult = this->jobsGPU.try_pop(job);
 	}
 
-	assert(q.exec());
-
-	if (q.affected_rows()) {
-		if (device_id < 0) {
-			// CPU
-			q = conn.query(sprn("\
-				SELECT j.grid0_id, j.grid1_id, j.grid2_id\
-				FROM jobs AS j\
-				WHERE\
-					(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid0_id) < %ld AND\
-					(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid1_id) < %ld AND\
-					(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid2_id) < %ld AND\
-					j.device_id = %ld AND\
-					j.state = 'RUNNING';",
-								this->criteria,
-								this->criteria,
-								this->criteria,
-								device_id));
-		} else {
-			// GPU
-			q = conn.query(sprn("\
-				SELECT j.grid0_id, j.grid1_id, j.grid2_id\
-				FROM jobs AS j\
-				WHERE\
-					((SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid0_id) >= %ld OR\
-					(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid1_id) >= %ld OR\
-					(SELECT g.col_byte FROM grids AS g WHERE g.id = j.grid2_id) >= %ld) AND\
-					j.device_id = %ld AND\
-					j.state = 'RUNNING';",
-								this->criteria,
-								this->criteria,
-								this->criteria,
-								device_id));
-		}
-
-		auto result = q.store();
-		return Grid3{s2l(result[0][0]), s2l(result[0][1]), s2l(result[0][2])};
+	if (myQueueResult) {
+		return myQueueResult;
 	}
 
-	q = conn.query(sprn("\
-		UPDATE IGNORE jobs AS j\
-		SET j.device_id = %ld, j.state = 'RUNNING'\
-		WHERE\
-			j.state = 'PENDING'\
-		ORDER BY j.grid0_id, j.grid1_id, j.grid2_id ASC\
-		LIMIT 1;",
-						device_id));
-	assert(q.exec());
-
-	if (q.affected_rows()) {
-		conn.query(sprn("\
-			SELECT j.grid0_id, j.grid1_id, j.grid2_id\
-			FROM jobs AS j\
-			WHERE j.state = 'RUNNING' AND j.device_id = %ld;",
-						device_id));
-		auto result = q.store();
-		return Grid3{s2l(result[0][0]), s2l(result[0][1]), s2l(result[0][2])};
+	if (device_id < 0) {
+		myQueueResult = this->jobsGPU.try_pop(job);
+	} else {
+		myQueueResult = this->jobsCPU.try_pop(job);
 	}
 
-	LOG("No more jobs. Halting.");
-	*/
-	return false;
+	return myQueueResult;
 }
 
 void Scheduler::recordJobResult(Job const &	 grid3,

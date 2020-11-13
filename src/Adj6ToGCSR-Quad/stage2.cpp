@@ -113,7 +113,7 @@ static auto dedup(sp<std::vector<E32>> in)
 		[&](size_t const & l, size_t const & r) { return l + r; },
 		tbb::auto_partitioner());
 
-	// printf("insz:%ld, ones: %ld\n", in->size(), ones.load());
+	// printf("insz:%ld, dups: %ld\n", in->size(), in->size() - ones.load());
 
 	out->resize(ones);
 
